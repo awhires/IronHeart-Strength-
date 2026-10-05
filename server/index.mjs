@@ -51,7 +51,7 @@ const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   if(!url.pathname.startsWith('/api/')){
     if(vite)return vite.middlewares(req,res);
-    try{const path=resolve('dist','.'+decodeURIComponent(url.pathname));if(!path.startsWith(resolve('dist')+'/')&&!path.startsWith(resolve('dist')+'\\'))throw Error();let data;let extension=extname(path);try{data=await readFile(path);}catch{if(extension){res.writeHead(404);return res.end('Not found');}data=await readFile('dist/index.html');extension='.html';}res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png'})[extension]||'application/octet-stream');res.end(data);}catch{res.writeHead(404);res.end('Not found');}return;
+    try{const path=resolve('dist','.'+decodeURIComponent(url.pathname));if(path!==resolve('dist')&&!path.startsWith(resolve('dist')+'/')&&!path.startsWith(resolve('dist')+'\\'))throw Error();let data;let extension=extname(path);try{data=await readFile(path);}catch{if(extension){res.writeHead(404);return res.end('Not found');}data=await readFile('dist/index.html');extension='.html';}res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png'})[extension]||'application/octet-stream');res.end(data);}catch{res.writeHead(404);res.end('Not found');}return;
   }
   res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
   try{
