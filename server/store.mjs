@@ -1,3 +1,4 @@
+import {missingConditioningExercises} from '../shared/conditioning-library.mjs';
 import {missingTrackingExercises} from '../shared/tracking.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
@@ -42,6 +43,7 @@ export function openStore(path, demo=false) {
     catch(error){db.exec('ROLLBACK');throw error;}
   }
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('tracking-library-v1')){db.exec('BEGIN');try{missingTrackingExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('tracking-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
+  if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('conditioning-library-v1')){db.exec('BEGIN');try{missingConditioningExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('conditioning-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   migrateToPounds(db);
   return { db,all,get,put,addUser };
 }

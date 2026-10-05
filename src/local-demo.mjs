@@ -1,10 +1,12 @@
+import {missingConditioningExercises} from '../shared/conditioning-library.mjs';
+import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
 import {missingTrackingExercises} from '../shared/tracking.mjs';
 // Device-only preview. No remote accounts or synchronization are implied.
 import {prepareTrackerWorkout} from '../shared/workout-tracker.mjs';
 import { exercises, programs } from '../server/seed.mjs';
 import { periodize, recommend } from '../server/progression.mjs';
 import { toPounds } from '../server/units.mjs';
-import {prepareProgram,prepareItems,recordPerformance,normalizeData} from '../shared/prescriptions.mjs';
+import {prepareProgram,prepareSession,prepareItems,recordPerformance,normalizeData} from '../shared/prescriptions.mjs';
 import {createDraftSaveService} from '../shared/ai/save-service.mjs';
 import {LIBRARY_UPDATE,missingLibraryExercises} from '../shared/exercise-library.mjs';
 const KEY='iron-heart-phone-preview-v1';
@@ -29,6 +31,7 @@ export function createLocalDemo(storage){
       state.libraryUpdates=[...(state.libraryUpdates||[]),LIBRARY_UPDATE];
     }
     if(!state.libraryUpdates?.includes('tracking-library-v1')){state.exercises.push(...missingTrackingExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'tracking-library-v1'];}
+    if(!state.libraryUpdates?.includes('conditioning-library-v1')){state.exercises.push(...missingConditioningExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'conditioning-library-v1'];}
     const b=clone(body),url=new URL(path,'https://preview.local/'),route=url.pathname.slice(1);
     const user=state.active==='coach'?state.coach:state.athletes.find(a=>a.id===state.active);
     const coach=()=>{if(user?.role!=='coach')throw Error('Open Coach view to make this change.');};
@@ -69,7 +72,7 @@ export function createLocalDemo(storage){
         result=save('assignments',assignment(p,b.athleteId,b.startDate));
       }else if(['assignment','reschedule','session-status'].includes(route)){
         coach();const {a,s}=session();
-        if(route==='assignment'){s.exercises=prepareItems(b.exercises,state.exercises);}
+        if(route==='assignment'){Object.assign(s,prepareSession({...s,exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},state.exercises));}
         if(route==='reschedule'){if(!Number.isInteger(b.day)||b.day<0||b.day>6)throw Error('Choose a weekday.');s.day=b.day;}
         if(route==='session-status')s.cancelled=!!b.cancelled;
         result=a;
@@ -82,8 +85,9 @@ export function createLocalDemo(storage){
         const {a,s}=session();if(s.cancelled)throw Error('This session is removed from the calendar.');
         if(state.logs.some(l=>l.assignmentId===a.id&&l.week===b.week&&l.session===b.session))throw Error('This workout is already logged. Delete its log to redo it.');
         if(!b.exercises||b.exercises.length!==s.exercises.length)throw Error('Complete every exercise.');
-        const recorded=recordPerformance(b.exercises,s.exercises);
-        result=save('logs',{...b,id:id(),athleteId:user.id,sessionName:s.name,createdAt:new Date().toISOString(),exercises:recorded});
+        const recorded=recordPerformance(b.exercises,s.exercises,state.exercises);
+        const blockResults=recordBlockScores(b.blockResults,s.blocks);
+        result=save('logs',{...b,id:id(),athleteId:user.id,sessionName:s.name,createdAt:new Date().toISOString(),exercises:recorded,...(blockResults.length?{blockResults,blocks:clone(s.blocks)}:{})});
       }else if(route==='recommendations'){
         coach();const a=owned(url.searchParams.get('id')),week=a.plan.find(w=>w.week===Number(url.searchParams.get('week')));if(!week)throw Error('Week not found.');
         result=week.sessions.flatMap((s,si)=>s.exercises.map((e,ei)=>({session:si,index:ei,exerciseId:e.exerciseId,current:e.load,...recommend(e,state.logs.filter(l=>l.athleteId===a.athleteId&&l.source!=='tracker').sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).flatMap(l=>l.exercises.filter(x=>x.exerciseId===e.exerciseId).map(x=>({...x,pain:l.pain,readiness:l.readiness}))))})));
@@ -93,7 +97,7 @@ export function createLocalDemo(storage){
           const collection={program:'programs',exercise:'exercises',assignment:'assignments',log:'logs'}[b.kind];
           const record=collection&&state[collection].find(x=>x.id===b.id);if(!record)throw Error('Record not found.');
           if(b.kind==='log'){if(user.role!=='coach'&&record.athleteId!==user.id)throw Error('Access denied.');}else coach();
-          if(b.kind==='exercise'&&(state.programs.some(p=>[p.sessions,...(p.plan||[]).map(w=>w.sessions)].some(ss=>ss.some(s=>s.exercises.some(e=>e.exerciseId===b.id))))||state.assignments.some(a=>a.plan.some(w=>w.sessions.some(s=>s.exercises.some(e=>e.exerciseId===b.id))))||state.logs.some(l=>l.exercises.some(e=>e.exerciseId===b.id))))throw Error('This exercise is still used in a program or workout history.');
+          if(b.kind==='exercise'&&[...state.programs,...state.assignments,...state.logs].some(r=>referencesExercise(r,b.id)))throw Error('This exercise is still used in a program or workout history.');
           state[collection]=state[collection].filter(x=>x.id!==b.id);
         }
       }else if(route==='account'&&method==='DELETE'){

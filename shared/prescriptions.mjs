@@ -1,3 +1,6 @@
+import {prepareBlocks} from './workout-blocks.mjs';
+import {trackingProfile,setSummary} from './tracking.mjs';
+import {prepareJournalEntry} from './journal-measurements.mjs';
 import {LOAD_MODE as L, EFFORT_MODE as E, LOAD_UNIT, REFERENCE_TYPE, TEMPO_REGEX, inPounds, convertWeight, PROGRAM_LENGTHS} from './ai/contract.mjs';
 const number = x => typeof x==='number'&&Number.isFinite(x);
 const range = (x,a,b) => number(x)&&x>=a&&x<=b;
@@ -40,6 +43,7 @@ export function loadText(item){
 }
 export function prescriptionText(item){
   const e=normalizePrescription(item);
+  if(e.trackingType&&e.trackingType!=='strength')return setSummary(e.metrics||{},e.trackingType);
   if(e.setBlocks?.length)return e.setBlocks.map(b=>prescriptionText({...e,...b,sets:b.sets??b.count,setBlocks:undefined})).join(' + ');
   return [`${e.sets} × ${e.reps}`,loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,`${e.rest}s rest`].filter(Boolean).join(' · ');
 }
@@ -48,6 +52,9 @@ export function prescribedSets(item){const e=normalizePrescription(item);return 
 
 export function validatePrescription(item,library){
   if(!object(item))return [{severity:'error',message:'Invalid exercise prescription.'}];
+  if(item.trackingType&&item.trackingType!=='strength'){
+    try{const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');prepareJournalEntry({sets:[item.metrics||{}]},exercise,library);return [];}catch(e){return [{severity:'error',message:e.message}];}
+  }
   const e=normalizePrescription(item),findings=[];
   const check=(ok,message)=>{if(!ok)findings.push({severity:'error',message});};
   check(library.some(x=>x.id===e.exerciseId),'Choose an existing library exercise.');
@@ -90,7 +97,7 @@ export function prepareProgram(input,library){
   for(const k of ['coachNotes','progressionInstructions'])if(p[k]!==undefined&&!text(p[k]))throw Error('Program notes must be text.');
   const sessions=value=>{
     if(!Array.isArray(value)||value.length<1||value.length>7)throw Error('Use 1–7 sessions per week.');
-    return value.map(s=>{if(!object(s)||!text(s.name,1,200)||!Number.isInteger(s.day)||!range(s.day,0,6))throw Error('Each session needs a name and valid weekday.');if(s.coachNotes!==undefined&&!text(s.coachNotes))throw Error('Session notes must be text.');return {...s,exercises:prepareItems(s.exercises,library)};});
+    return value.map(s=>{if(!object(s)||!text(s.name,1,200)||!Number.isInteger(s.day)||!range(s.day,0,6))throw Error('Each session needs a name and valid weekday.');if(s.coachNotes!==undefined&&!text(s.coachNotes))throw Error('Session notes must be text.');return prepareSession(s,library);});
   };
   if(p.plan!==undefined){
     if(!Array.isArray(p.plan)||p.plan.length!==p.weeks)throw Error('The block must include every week.');
@@ -99,10 +106,11 @@ export function prepareProgram(input,library){
   }else p.sessions=sessions(p.sessions);
   return p;
 }
-export function recordPerformance(entries,targets){
+export function recordPerformance(entries,targets,library=[]){
   if(!Array.isArray(entries)||entries.length!==targets.length)throw Error('Log every exercise.');
   return entries.map((entry,i)=>{
     const target=normalizePrescription(targets[i]);
+    if(target.trackingType&&target.trackingType!=='strength'){if(entry.exerciseId!==target.exerciseId)throw Error('Exercise mismatch.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
     if(entry.exerciseId!==target.exerciseId||!Array.isArray(entry.sets)||entry.sets.length!==target.sets)throw Error('Complete every prescribed set.');
     const perSet=prescribedSets(target);
     const sets=entry.sets.map((s,j)=>{
@@ -121,4 +129,12 @@ export function normalizeData(data){
   result.assignments?.forEach(a=>a.plan.forEach(w=>sessions(w.sessions)));
   result.logs?.forEach(l=>l.exercises.forEach(e=>{if(e.target)e.target=normalizePrescription(e.target);}));
   return result;
+}
+
+export function prepareSession(s,library){
+ const items=s.exercises||[];
+ const exercises=items.length?prepareItems(items,library):[];
+ const blocks=prepareBlocks(s.blocks,exercises,library);
+ if(!exercises.length&&!blocks?.some(b=>b.type==='Metcon'))throw Error('Add an exercise or Metcon.');
+ return {...s,exercises,...(blocks?{blocks}:{})};
 }

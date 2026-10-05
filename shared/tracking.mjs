@@ -1,3 +1,4 @@
+import {formatTime} from './time.mjs';
 // Journal measurement profiles are additive. Old programmed prescriptions stay untouched.
 export const MODIFIERS=['pause','hang','high hang','low hang','above knee','below knee','blocks','tempo','complex'];
 const rows=[
@@ -18,10 +19,10 @@ const rows=[
 export const trackingExercises=rows.map(([id,name,region,equipment,trackingType])=>({id,name,region,equipment,trackingType,pattern:region==='Cardio'?'Cardio':region==='Olympic Weightlifting'?'Olympic':region==='Isometric'?'Hold':'Core',cues:'Use a controlled technique and record the work actually completed.',video:''}));
 const normalize=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 export function missingTrackingExercises(library){return trackingExercises.filter(e=>!library.some(x=>x.id===e.id||normalize(x.name)===normalize(e.name)));}
-export function trackingProfile(e){return e?.trackingType||trackingExercises.find(x=>x.id===e?.id||normalize(x.name)===normalize(e?.name))?.trackingType||(e?.id==='plank'?'timed':'strength');}
+export function trackingProfile(e){return e?.trackingType||trackingExercises.find(x=>x.id===e?.id||normalize(x.name)===normalize(e?.name))?.trackingType||(/bike|cycling|cycle/i.test(e?.name)?'cycling':/swim/i.test(e?.name)?'swimming':/run|jog/i.test(e?.name)?'running':/rowerg|skierg|rowing/i.test(e?.name)?'erg':/cardio|endurance/i.test(e?.region+' '+e?.pattern)?'cardio':e?.id==='plank'?'timed':'strength');}
 export function exerciseCategory(e){return trackingExercises.find(x=>x.id===e?.id||normalize(x.name)===normalize(e?.name))?.region||e.region;}
-export const FIELDS={strength:['reps','load','rpe','rir'],timed:['durationSeconds'],loadedTimed:['load','durationSeconds'],carry:['load','distance','durationSeconds'],treadmill:['distance','durationSeconds','speedMph','incline'],stairs:['level','durationSeconds'],erg:['distance','durationSeconds','paceSeconds'],running:['distance','durationSeconds','paceSeconds']};
-export const DISTANCE_METERS={mi:1609.344,km:1000,m:1};
+export const FIELDS={strength:['reps','load','rpe','rir'],timed:['durationSeconds'],loadedTimed:['load','durationSeconds'],carry:['load','distance','durationSeconds'],treadmill:['distance','durationSeconds','speedMph','incline'],stairs:['level','durationSeconds','steps','floors'],cycling:['distance','durationSeconds','speedMph','watts','cadence'],swimming:['distance','durationSeconds','paceSeconds'],cardio:['distance','durationSeconds','calories','watts'],erg:['distance','durationSeconds','paceSeconds','watts','cadence','calories'],running:['distance','durationSeconds','paceSeconds']};
+export const DISTANCE_METERS={mi:1609.344,km:1000,m:1,yd:0.9144};
 export function convertDistance(value,from,to){if(!Number.isFinite(value)||!DISTANCE_METERS[from]||!DISTANCE_METERS[to])throw Error('Invalid distance or unit.');return value*DISTANCE_METERS[from]/DISTANCE_METERS[to];}
 export function expandBlocks(blocks){
  if(!Array.isArray(blocks)||!blocks.length||blocks.length>30)throw Error('Add 1–30 set blocks.');
@@ -33,8 +34,11 @@ const aliases={BP:'bench',PC:'power-clean',BS:'squat',FS:'front-squat',OHS:'over
 export function matchExercise(name,library){const exact=library.filter(e=>normalize(e.name)===normalize(name));if(exact.length===1)return exact[0];if(exact.length>1)return null;return library.find(e=>e.id===aliases[String(name).trim().toUpperCase()])||null;}
 export function setSummary(s,type='strength'){
  const parts=[];if(s.reps!=null)parts.push(`${s.reps} reps`);if(s.load!=null)parts.push(`${s.load} ${s.loadUnit==='kg'?'kg':'lb'}`);
- if(s.durationSeconds!=null)parts.push(`${s.durationSeconds} sec`);if(s.distance!=null)parts.push(`${s.distance} ${s.distanceUnit}`);
+ if(s.durationSeconds!=null)parts.push(`${formatTime(s.durationSeconds)}`);if(s.distance!=null)parts.push(`${s.distance} ${s.distanceUnit}`);
  if(s.speedMph!=null)parts.push(`${s.speedMph} mph`);if(s.incline!=null)parts.push(`${s.incline}% incline`);if(s.level!=null)parts.push(`level ${s.level}`);
- if(s.paceSeconds!=null)parts.push(`${Math.floor(Math.round(s.paceSeconds)/60)}:${String(Math.round(s.paceSeconds)%60).padStart(2,'0')} / ${type==='erg'?'500 m':s.distanceUnit||'mi'}`);
- if(s.rpe!=null)parts.push(`RPE ${s.rpe}`);if(s.rir!=null)parts.push(`RIR ${s.rir}`);return parts.join(' · ')||'No metrics recorded';
+ if(s.paceSeconds!=null)parts.push(`${Math.floor(Math.round(s.paceSeconds)/60)}:${String(Math.round(s.paceSeconds)%60).padStart(2,'0')} / ${type==='erg'?'500 m':type==='swimming'?`100 ${s.distanceUnit==='yd'?'yd':'m'}`:s.distanceUnit||'mi'}`);
+ if(s.steps!=null)parts.push(`${s.steps} steps`);if(s.floors!=null)parts.push(`${s.floors} floors`);if(s.watts!=null)parts.push(`${s.watts} W`);if(s.cadence!=null)parts.push(`${s.cadence} RPM`);if(s.calories!=null)parts.push(`${s.calories} cal`);if(s.rpe!=null)parts.push(`RPE ${s.rpe}`);if(s.rir!=null)parts.push(`RIR ${s.rir}`);return parts.join(' · ')||'No metrics recorded';
 }
+
+export const CARDIO_TYPES=['treadmill','stairs','erg','running','cycling','swimming','cardio'];
+export const isCardio=e=>CARDIO_TYPES.includes(trackingProfile(e));

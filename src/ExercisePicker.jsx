@@ -1,0 +1,6 @@
+import React,{useState} from 'react';
+import {exerciseCategory} from '../shared/tracking.mjs';
+export default function ExercisePicker({exercises,onSelect,onClose}){
+ const [search,setSearch]=useState(''),[category,setCategory]=useState('');
+ return <section className="panel journal-picker" role="region" aria-label="Exercise library selector"><div className="row spread"><h3>Exercise library</h3><button type="button" className="btn secondary" onClick={onClose}>Close library</button></div><div className="form-grid"><label className="field"><span>Search exercises</span><input autoFocus type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label><label className="field"><span>Category</span><select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{[...new Set(exercises.map(exerciseCategory))].sort().map(c=><option key={c}>{c}</option>)}</select></label></div><div className="journal-results">{exercises.filter(e=>(!category||exerciseCategory(e)===category)&&`${e.name} ${e.equipment}`.toLowerCase().includes(search.toLowerCase())).map(e=><button className="journal-result" type="button" key={e.id} onClick={()=>onSelect(e)}><span><strong>{e.name}</strong><small>{exerciseCategory(e)} · {e.equipment}</small></span><span>+ Add</span></button>)}</div></section>;
+}

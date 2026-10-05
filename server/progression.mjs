@@ -1,6 +1,6 @@
 import {normalizePrescription} from '../shared/prescriptions.mjs';
 import {LOAD_MODE, EFFORT_MODE, LOAD_UNIT} from '../shared/ai/contract.mjs';
-export function supportsLoadProgression(item){const e=normalizePrescription(item);return !e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
+export function supportsLoadProgression(item){const e=normalizePrescription(item);return !e.trackingType&&!e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
 // Generate a complete, reviewable block from a coach-authored first week.
 export function generateBlock(sessions, weeks, options = {}) {
   if(options.method==='westside')return generateWestsideBlock(sessions,weeks,options);
@@ -32,6 +32,7 @@ export function generateWestsideBlock(sessions,weeks,options={}) {
   for(const [si,s] of sessions.entries())for(const [ei,e] of s.exercises.entries()){
     const mode=rules[`${si}:${ei}:${e.exerciseId}`]?.mode||'hold';
     if(mode!=='hold'&&!supportsLoadProgression(e))throw new Error('Automatic load progression supports fixed pounds with RPE. Keep this prescription and edit its weeks manually.');
+    if(e.trackingType&&e.trackingType!=='strength')continue;
     if(!Number.isInteger(e.sets)||e.sets<1||e.sets>12||(supportsLoadProgression(e)&&(e.load<0||e.load>1200)))throw new Error('Check Week 1 weights and sets before generating.');
   }
   for(const rule of Object.values(rules)){

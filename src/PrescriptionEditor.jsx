@@ -1,19 +1,25 @@
-import React from 'react';
+import React,{useState} from 'react';
+import ExercisePicker from './ExercisePicker.jsx';
+import CardioMetrics from './CardioMetrics.jsx';
+import {trackingProfile,isCardio} from '../shared/tracking.mjs';
 import {Plus,Trash2} from 'lucide-react';
 import {LOAD_MODE as L,EFFORT_MODE as E,LOAD_UNIT,REFERENCE_TYPE,parseOptionalNumber} from '../shared/ai/contract.mjs';
-import {normalizePrescription,loadText,validatePrescription} from '../shared/prescriptions.mjs';
+import {normalizePrescription,loadText,validatePrescription,newPrescription} from '../shared/prescriptions.mjs';
 const Field=({label,children})=><label className="field"><span>{label}</span>{children}</label>;
 export {newPrescription} from '../shared/prescriptions.mjs';
 export default function PrescriptionEditor({items,exercises,onChange}){
+  const [picking,setPicking]=useState(false);
   const change=(i,patch)=>onChange(items.map((old,j)=>{if(i!==j)return old;const next={...normalizePrescription(old),...patch};if(next.loadMode===L.PERCENTAGE)next.load=null;return next;}));
   return <><div className="exercise-editor">{items.map((item,i)=>{
+    const profile=trackingProfile(exercises.find(x=>x.id===item.exerciseId));
+    if(isCardio(exercises.find(x=>x.id===item.exerciseId))||item.trackingType&&item.trackingType!=='strength')return <div className="editor-row" key={i}><div className="row spread"><h3>{exercises.find(x=>x.id===item.exerciseId)?.name}</h3><button type="button" className="btn secondary" onClick={()=>onChange(items.filter((_,j)=>j!==i))}>Remove exercise</button></div><CardioMetrics value={item.metrics||{}} type={profile} onChange={metrics=>onChange(items.map((v,j)=>j===i?{...v,trackingType:profile,metrics}:v))}/><label className="field"><span>Notes</span><input value={item.notes||''} onChange={ev=>change(i,{notes:ev.target.value})}/></label></div>;
     const e=normalizePrescription(item),label=s=>`${s} exercise ${i+1}`,edit=(k,v)=>change(i,{[k]:v});
     const input=(key,title,min,max,step=1,required=true)=><Field label={title}><input aria-label={label(title)} type="number" min={min} max={max} step={step} required={required} value={e[key]??''} onChange={ev=>edit(key,parseOptionalNumber(ev.target.value))}/></Field>;
     const findings=validatePrescription(e,exercises);
     const reference=e.reference1RM;
     const ref=(key,value)=>edit('reference1RM',{...reference,[key]:value});
     return <div className="editor-row" key={i}>
-      <div className="editor-top"><span className="exercise-index">{String.fromCharCode(65+i)}</span><select aria-label={`Exercise ${i+1}`} value={e.exerciseId} onChange={ev=>change(i,{exerciseId:ev.target.value,exerciseName:exercises.find(x=>x.id===ev.target.value)?.name,reference1RM:null})}>{exercises.map(ex=><option key={ex.id} value={ex.id}>{ex.name}</option>)}</select><button type="button" className="icon-button danger" disabled={items.length===1} aria-label={`Remove exercise ${i+1}`} onClick={()=>onChange(items.filter((_,j)=>j!==i))}><Trash2 size={17}/></button></div>
+      <div className="editor-top"><span className="exercise-index">{String.fromCharCode(65+i)}</span><select aria-label={`Exercise ${i+1}`} value={e.exerciseId} onChange={ev=>{const ex=exercises.find(x=>x.id===ev.target.value),type=trackingProfile(ex);onChange(items.map((v,j)=>j!==i?v:type==='strength'?{...newPrescription(ex.id),exerciseName:ex.name}:{exerciseId:ex.id,trackingType:type,metrics:{distanceUnit:['erg','swimming','carry'].includes(type)?'m':'mi'},notes:''}));}}>{exercises.map(ex=><option key={ex.id} value={ex.id}>{ex.name}</option>)}</select><button type="button" className="icon-button danger" disabled={items.length===1} aria-label={`Remove exercise ${i+1}`} onClick={()=>onChange(items.filter((_,j)=>j!==i))}><Trash2 size={17}/></button></div>
       <div className="target-fields">
         {input('sets','Sets',1,12)}{input('reps','Reps',1,50)}
         <Field label="Loading"><select aria-label={label('Loading')} value={e.loadMode} onChange={ev=>change(i,{loadMode:ev.target.value,load:null,percent1RM:null,reference1RM:null})}>{[[L.FIXED,'Fixed'],[L.PERCENTAGE,'% 1RM'],[L.BODYWEIGHT,'Bodyweight'],[L.ATHLETE_SELECTED,'Athlete selects']].map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></Field>
@@ -30,5 +36,5 @@ export default function PrescriptionEditor({items,exercises,onChange}){
       <details className="prescription-details"><summary>Tempo, notes & progression</summary><div className="form-grid"><Field label="Tempo (optional)"><input aria-label={label('Tempo')} placeholder="3-1-X-0" value={e.tempo??''} onChange={ev=>edit('tempo',ev.target.value||null)}/></Field><Field label="Progression instructions"><textarea aria-label={label('Progression instructions')} value={e.progressionInstructions} onChange={ev=>edit('progressionInstructions',ev.target.value)}/></Field></div><input className="notes-input" aria-label={`Coaching notes exercise ${i+1}`} placeholder="Coaching notes…" value={e.notes} onChange={ev=>edit('notes',ev.target.value)}/></details>
       {findings.map((f,j)=><p className={f.severity==='error'?'error':'footnote'} key={j}>{f.message}</p>)}
     </div>;
-  })}</div><button type="button" className="btn secondary" disabled={items.length>=15} onClick={()=>onChange([...items,newPrescription(exercises[0]?.id)])}><Plus size={16}/>Add from exercise library</button></>;
+  })}</div><button type="button" className="btn secondary" disabled={items.length>=15} onClick={()=>setPicking(v=>!v)}><Plus size={16}/>Add from exercise library</button>{picking&&<ExercisePicker exercises={exercises} onClose={()=>setPicking(false)} onSelect={ex=>{onChange([...items,trackingProfile(ex)!=='strength'?{exerciseId:ex.id,trackingType:trackingProfile(ex),metrics:{distanceUnit:['erg','swimming'].includes(trackingProfile(ex))?'m':'mi'},notes:''}:newPrescription(ex.id)]);setPicking(false);}}/>}</>;
 }
