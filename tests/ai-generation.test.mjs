@@ -18,14 +18,14 @@ test('OpenAI adapter requests strict structured output without tools or client c
   assert.deepEqual(await p.generateProgramDraft(input.request,{exercise_library:[]}),createFixture());
   assert.equal(request.url,'https://api.openai.com/v1/responses');assert.equal(request.body.text.format.strict,true);assert.equal(request.body.text.format.type,'json_schema');assert.equal(request.body.store,false);assert.equal(request.body.tools,undefined);
   assert.ok(!JSON.stringify(request.body).includes(secret));assert.equal(request.headers.Authorization,'Bearer '+secret);
-  const schema=providerSchema();assert.equal(schema.properties.schemaVersion.enum[0],1);assert.ok(schema.properties.validationFindings.items.required.includes('suggestedResolution'));assert.ok(!AI_DRAFT_SCHEMA.properties.validationFindings.items.required.includes('suggestedResolution'));
+  const schema=providerSchema();assert.equal(schema.properties.schemaVersion.enum[0],2);assert.ok(schema.properties.validationFindings.items.required.includes('suggestedResolution'));assert.ok(!AI_DRAFT_SCHEMA.properties.validationFindings.items.required.includes('suggestedResolution'));
 });
 test('valid generation resets provider approval claims, preserves request and minimizes athlete context',async()=>{
   const draft=createFixture();draft.status='approved';draft.originalRequest='Model rewrite';draft.athleteId='someone';draft.sourceProgramId='overwrite';let received;
   const svc=createGenerationService({config,provider:{...provider(draft),generateProgramDraft:async(request,ctx)=>{received=ctx;return draft;}}});
   const out=await svc.generateProgramDraft({...input,athleteId:'jordan'},{...context,athlete:{id:'jordan',name:'Private name',email:'private@example.test',sport:'Field sport',pain:true}});
   assert.equal(out.draft.originalRequest,input.request);assert.equal(out.draft.status,'draft');assert.equal(out.draft.athleteId,'jordan');assert.equal(out.draft.sourceProgramId,null);assert.equal(out.validation.counts.error,0);
-  assert.deepEqual(received.athlete,{sport:'Field sport'});assert.deepEqual(Object.keys(received.exercise_library[0]),['exerciseId','name','region','equipment','movementPattern']);
+  assert.deepEqual(received.athlete,{sport:'Field sport'});assert.deepEqual(Object.keys(received.exercise_library[0]),['exerciseId','name','region','equipment','movementPattern','trackingType']);
   assert.ok(!JSON.stringify(out).includes(secret));assert.ok(!JSON.stringify(received).includes('private@example'));assert.equal(out.metadata.schemaVersion,1);assert.equal(out.debug,undefined);
 });
 test('malformed JSON, refusal and incomplete output are sanitized failures',async()=>{

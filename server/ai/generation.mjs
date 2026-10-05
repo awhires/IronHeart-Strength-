@@ -1,3 +1,4 @@
+import {trackingProfile} from '../../shared/tracking.mjs';
 import {randomUUID} from 'node:crypto';
 import {createOpenAIProvider,GenerationError} from './openai.mjs';
 import {createGeminiProvider} from './gemini.mjs';
@@ -37,7 +38,7 @@ export function createGenerationService({config=generationConfig(),provider,prod
       if(recent.length>=config.requestsPerHour)throw new GenerationError('GENERATION_RATE_LIMIT','Your hourly generation limit has been reached. Try again later.',429);
       attempts.set(coachId,[...recent,time]);active.add(coachId);
       try{
-        const context={exercise_library:library.map(e=>({exerciseId:e.id,name:e.name,region:e.region,equipment:e.equipment,movementPattern:e.pattern})),confirmed_requirements:value.requirements,athlete:athlete?{sport:athlete.sport}:null};
+        const context={exercise_library:library.map(e=>({exerciseId:e.id,name:e.name,region:e.region,equipment:e.equipment,movementPattern:e.pattern,trackingType:trackingProfile(e)})),confirmed_requirements:value.requirements,athlete:athlete?{sport:athlete.sport}:null};
         if(JSON.stringify(context).length>60000)reject('Exercise context is too large. Reduce the library size.');
         let output;try{output=await adapter.generateProgramDraft(value.request,context);}catch(e){if(e instanceof GenerationError)throw e;throw new GenerationError('PROVIDER_UNAVAILABLE','AI generation failed. Try again later.');}
         if(!object(output)||Buffer.byteLength(JSON.stringify(output))>80000)throw new GenerationError('INVALID_OUTPUT','AI returned an invalid or oversized draft. Request a smaller block.');
@@ -46,7 +47,7 @@ export function createGenerationService({config=generationConfig(),provider,prod
         const draft={...structuredClone(output),status:DRAFT_STATUS.DRAFT,athleteId:value.athleteId,sourceProgramId:null,originalRequest:value.request,validationFindings:[]};
         const validation=validateDraft(draft,library,value.requirements);
         draft.validationFindings=validation.findings;draft.status=validation.findings.length?DRAFT_STATUS.NEEDS_REVIEW:DRAFT_STATUS.DRAFT;
-        const metadata={provider:adapter.name,model:adapter.model,generatedAt:new Date(now()).toISOString(),schemaVersion:SCHEMA_VERSION,durationMs:Math.max(0,now()-time)};
+        const metadata={provider:adapter.name,model:adapter.model,generatedAt:new Date(now()).toISOString(),schemaVersion:draft.schemaVersion,durationMs:Math.max(0,now()-time)};
         return {generationId:newId(),draft,requirements:value.requirements,validation,metadata,...(config.debug&&!production?{debug:{coachRequest:value.request,structuredResponse:structuredClone(draft),validationFindings:validation.findings,durationMs:metadata.durationMs}}:{})};
       }finally{active.delete(coachId);}
     }

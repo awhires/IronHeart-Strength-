@@ -1,3 +1,7 @@
+import {AI_DRAFT_SCHEMA_V2,conditioningSession} from './conditioning-contract.mjs';
+import {validateCardioPrescription} from '../cardio-prescriptions.mjs';
+import {prepareBlocks} from '../workout-blocks.mjs';
+import {trackingProfile,CARDIO_TYPES} from '../tracking.mjs';
 import {AI_DRAFT_SCHEMA, LOAD_MODE, LOAD_UNIT, EFFORT_MODE, SEVERITY, TEMPO_REGEX, inPounds} from './contract.mjs';
 import {validMaximum, calculatePercentageLoad} from '../prescriptions.mjs';
 const record = x => x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -7,7 +11,7 @@ const validDate = x => typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Numbe
 // Small validator for exactly the JSON Schema keywords used by this contract.
 // No coercion, normalization, inferred exercise IDs, or mutation.
 function shape(value,schema,path,add){
-  if(schema.anyOf){if(value===null)return;return shape(value,schema.anyOf.find(s=>s.type!=='null'),path,add);}
+  if(schema.anyOf){const attempts=schema.anyOf.map(branch=>{const errors=[];shape(value,branch,path,(...args)=>errors.push(args));return errors;});if(attempts.some(errors=>errors.length===0))return;const best=attempts.reduce((a,b)=>a.length<=b.length?a:b);for(const args of best)add(...args);return;}
   if('const' in schema&&value!==schema.const)add('UNSUPPORTED_SCHEMA_VERSION',path,'Unsupported draft schema version.');
   if(schema.enum&&!schema.enum.includes(value))add('INVALID_ENUM',path,'Choose one of the allowed values.');
   if(schema.type){
@@ -32,7 +36,7 @@ function shape(value,schema,path,add){
     for(const key of schema.required||[])if(!Object.hasOwn(value,key))add('MISSING_FIELD',`${path}/${key}`,'Required contract field is missing; use null for an unknown nullable value.');
     for(const [key,v] of Object.entries(value)){
       if(schema.properties[key])shape(v,schema.properties[key],`${path}/${key}`,add);
-      else if(schema.additionalProperties===false)add('UNSUPPORTED_FIELD',`${path}/${key}`,'This field is not part of the v1 draft contract.');
+      else if(schema.additionalProperties===false)add('UNSUPPORTED_FIELD',`${path}/${key}`,'This field is not part of this draft contract.');
     }
   }
 }
@@ -52,20 +56,22 @@ export function estimateSessionMinutes(session){
   let seconds=600;
   if(!Array.isArray(session?.exercises))return null;
   for(const e of session.exercises){
+    if(e?.trackingType){if(!number(e.metrics?.durationSeconds))return null;seconds+=120+e.intervalCount*e.metrics.durationSeconds+Math.max(0,e.intervalCount-1)*(e.restSeconds||0);continue;}
     if(!record(e)||!number(e.sets)||!number(e.reps)||!number(e.rest))return null;
     const tempo=typeof e.tempo==='string'&&TEMPO_REGEX.test(e.tempo)?e.tempo.split('-').reduce((n,x)=>n+(x==='X'?1:Number(x)),0):4;
     seconds+=120+e.sets*e.reps*tempo+Math.max(0,e.sets-1)*e.rest;
   }
+  for(const b of session.blocks||[])if(b.type==='Metcon'){const m=b.metcon;if(!m?.durationSeconds&&!m?.timeCapSeconds)return null;seconds+=m.durationSeconds||m.timeCapSeconds;}
   return Math.ceil(seconds/60);
 }
 
 export function validateDraftStructure(draft){
-  const findings=[];shape(draft,AI_DRAFT_SCHEMA,'',(code,path,message)=>findings.push({code,path,message,severity:SEVERITY.ERROR}));return findings;
+  const findings=[];shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',(code,path,message)=>findings.push({code,path,message,severity:SEVERITY.ERROR}));return findings;
 }
 export function validateDraft(draft,library=[],requirements={}){
   const findings=[];
   const add=(code,path,message,severity=SEVERITY.ERROR,suggestedResolution)=>findings.push({code,severity,message,path,...(suggestedResolution?{suggestedResolution}:{})});
-  shape(draft,AI_DRAFT_SCHEMA,'',add);
+  shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',add);
   const p=draft?.program;
   if(record(p)){
     if(requirements.programWeeks!==undefined&&p.weeks!==requirements.programWeeks)add('PROGRAM_LENGTH_MISMATCH','/program/weeks',`Requested ${requirements.programWeeks} weeks; draft has ${p.weeks??'no selected length'}.`,SEVERITY.WARNING);
@@ -87,13 +93,16 @@ export function validateDraft(draft,library=[],requirements={}){
           if(!Number.isInteger(s.day)||s.day<0||s.day>6)add('INVALID_DAY',`${sp}/day`,'Choose a weekday from Sunday (0) to Saturday (6).');
           if(days.has(s.day))add('DUPLICATE_SESSION_DAY',`${sp}/day`,'Two sessions use the same weekday. Confirm that this is intentional.',SEVERITY.WARNING);
           days.add(s.day);
-          if(!Array.isArray(s.exercises)||!s.exercises.length){add('EMPTY_SESSION',`${sp}/exercises`,'Add at least one exercise.');return;}
+          if(draft.schemaVersion===2){try{const clean=conditioningSession(s);if(clean.blocks)prepareBlocks(clean.blocks,clean.exercises,library);}catch(e){add('INVALID_WORKOUT_BLOCK',`${sp}/blocks`,e.message);}}
+          if(!Array.isArray(s.exercises)||!s.exercises.length&&!s.blocks?.some(b=>b.type==='Metcon')){add('EMPTY_SESSION',`${sp}/exercises`,'Add at least one exercise.');return;}
           s.exercises.forEach((e,ei)=>{
             if(!record(e))return;
             const ep=`${sp}/exercises/${ei}`,known=library.find(x=>x.id===e.exerciseId);
             if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,'Exercise needs library match.',SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
             if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Choose another exercise.`);
+            if(e.trackingType){try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
+            if(known&&CARDIO_TYPES.includes(trackingProfile(known)))add('CARDIO_REQUIRES_TYPED_PRESCRIPTION',ep,'Use a v2 cardio prescription with distance/time metrics, not strength sets/reps.');
             if(e.loadMode===LOAD_MODE.FIXED&&(!number(e.load)||e.load<=0))add('MISSING_LOAD',`${ep}/load`,'Fixed loading needs a positive prescribed weight; blank is not zero.');
             if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&e.load!==0)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Bodyweight cannot have a fixed external load.');
             if(e.loadMode===LOAD_MODE.ATHLETE_SELECTED&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Athlete-selected loading must leave the fixed load unspecified.');

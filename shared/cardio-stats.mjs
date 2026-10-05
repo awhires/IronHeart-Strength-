@@ -21,7 +21,7 @@ export function cardioStats(logs,exercise,athleteId){
   const meters=sum('meters'),seconds=sum('seconds'),complete=metrics.every(m=>m.meters&&m.seconds);
   // Incomplete totals never produce a fabricated pace. Explicit speed/pace remains usable.
   const speed=complete?meters/seconds:metrics.every(m=>m.speed!=null)?mean('speed'):null;
-  const context=JSON.stringify([sets.map(s=>[s.incline??null,s.level??null]),entries.map(e=>e.intervals||[])]);
+  const context=JSON.stringify([sets.map(s=>[s.incline??null,s.level??null]),entries.map(e=>[e.intervals||[],e.target?.restSeconds||0])]);
   sessions.push({id:l.id,name:l.sessionName,date:workoutDate(l),createdAt:l.createdAt,meters,seconds,speed,watts:mean('watts'),cadence:mean('cadence'),calories:sum('calories'),stepRate:seconds&&sum('steps')?sum('steps')/seconds*60:null,floorRate:seconds&&sum('floors')?sum('floors')/seconds*60:null,context,complete});
  }
  sessions.sort((a,b)=>(a.date||'').localeCompare(b.date||'')||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id)));

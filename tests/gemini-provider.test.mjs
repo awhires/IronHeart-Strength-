@@ -31,7 +31,7 @@ test('Gemini requests structured drafts on the server without tools and discards
   assert.equal(sent.url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent');
   assert.equal(sent.headers['x-goog-api-key'],secret);assert.ok(!sent.url.includes(secret));assert.ok(!JSON.stringify(sent.body).includes(secret));
   assert.equal(sent.body.tools,undefined);assert.equal(sent.body.generationConfig.candidateCount,1);assert.equal(sent.body.generationConfig.maxOutputTokens,24000);
-  assert.equal(sent.body.generationConfig.responseMimeType,'application/json');assert.equal(sent.body.generationConfig.responseJsonSchema.properties.schemaVersion.enum[0],1);
+  assert.equal(sent.body.generationConfig.responseMimeType,'application/json');assert.equal(sent.body.generationConfig.responseJsonSchema.properties.schemaVersion.enum[0],2);
   assert.equal(JSON.parse(sent.body.contents[0].parts[0].text).coach_request,input.request);
   assert.deepEqual(AI_DRAFT_SCHEMA,before);
 });

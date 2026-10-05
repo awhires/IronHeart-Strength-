@@ -1,3 +1,4 @@
+import {calculatedCardioMetrics} from './cardio-prescriptions.mjs';
 import {trackingProfile,FIELDS,expandBlocks,MODIFIERS,complexLabel,DISTANCE_METERS,CARDIO_TYPES} from './tracking.mjs';
 import {inPounds} from './ai/contract.mjs';
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
@@ -24,11 +25,12 @@ export function prepareJournalEntry(entry,exercise,library){
   for(const [key,max] of [['durationSeconds',86400],['distance',1000000],['speedMph',60],['incline',100],['level',100],['paceSeconds',86400],['watts',10000],['cadence',500],['calories',100000],['steps',1000000],['floors',10000]]){
    if(FIELDS[trackingType].includes(key)&&s[key]!=null){if(!optional(s[key],0,max))throw Error(`Check ${key}.`);out[key]=s[key];}
   }
-  if(out.distance!=null||FIELDS[trackingType].includes('paceSeconds')){out.distanceUnit=s.distanceUnit??(trackingType==='carry'?'m':'mi');if(!DISTANCE_METERS[out.distanceUnit])throw Error('Choose a valid distance unit.');}
+  if(out.distance!=null||FIELDS[trackingType].includes('paceSeconds')){out.distanceUnit=s.distanceUnit??(['carry','erg','swimming'].includes(trackingType)?'m':'mi');if(!DISTANCE_METERS[out.distanceUnit])throw Error('Choose a valid distance unit.');}
   if(['timed','loadedTimed'].includes(trackingType)&&!(out.durationSeconds>0))throw Error('Enter a positive duration in seconds.');
   if(trackingType==='loadedTimed'&&out.load==null)throw Error('Enter the hold load.');
   if(trackingType==='carry'&&(!(out.distance>0)||out.load==null))throw Error('Enter carry load and distance.');
   if(CARDIO_TYPES.includes(trackingType)&&!(out.durationSeconds>0)&&!(out.distance>0))throw Error('Enter cardio duration or distance.');
+  if(!strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10))throw Error('Check optional cardio RPE 1–10.');if(CARDIO_TYPES.includes(trackingType)){const computed=calculatedCardioMetrics(out,trackingType);for(const k of ["paceSeconds","speedMph"])if(out[k]==null&&computed[k]!=null)out[k]=+computed[k].toFixed(6);}}
   if(s.blockIndex!=null)out.blockIndex=s.blockIndex;
   return out;
  });

@@ -1,4 +1,4 @@
-import {missingConditioningExercises} from '../shared/conditioning-library.mjs';
+import {missingConditioningExercises,missingSingleUnders} from '../shared/conditioning-library.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
 import {missingTrackingExercises} from '../shared/tracking.mjs';
 // Device-only preview. No remote accounts or synchronization are implied.
@@ -32,6 +32,7 @@ export function createLocalDemo(storage){
     }
     if(!state.libraryUpdates?.includes('tracking-library-v1')){state.exercises.push(...missingTrackingExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'tracking-library-v1'];}
     if(!state.libraryUpdates?.includes('conditioning-library-v1')){state.exercises.push(...missingConditioningExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'conditioning-library-v1'];}
+    if(!state.libraryUpdates?.includes('single-unders-v1')){state.exercises.push(...missingSingleUnders(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'single-unders-v1'];}
     const b=clone(body),url=new URL(path,'https://preview.local/'),route=url.pathname.slice(1);
     const user=state.active==='coach'?state.coach:state.athletes.find(a=>a.id===state.active);
     const coach=()=>{if(user?.role!=='coach')throw Error('Open Coach view to make this change.');};
@@ -39,6 +40,9 @@ export function createLocalDemo(storage){
     const session=()=>{const a=owned(b.id||b.assignmentId),s=a.plan.find(w=>w.week===b.week)?.sessions[b.session];if(!s)throw Error('Session not found.');return {a,s};};
     const save=(collection,value)=>{const i=state[collection].findIndex(x=>x.id===value.id);if(i<0)state[collection].push(value);else state[collection][i]=value;return value;};
     const eraseAthlete=key=>{state.athletes=state.athletes.filter(x=>x.id!==key);state.assignments=state.assignments.filter(x=>x.athleteId!==key);state.logs=state.logs.filter(x=>x.athleteId!==key);};
+    const requestId=b.clientRequestId;delete b.clientRequestId;
+    const receiptKey=requestId&&user?`${user.id}:${requestId}`:null;
+    if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){const old=state.workoutReceipts?.[receiptKey];if(old){if(old.payload!==JSON.stringify({route,b}))throw Error('Save ID belongs to a different workout.');const prior=state.logs.find(l=>l.id===old.id);if(!prior)throw Error('Workout was deleted; start a new workout to redo it.');return clone(prior);}}
     let result={ok:true};
     if(route==='config')result={demo:true,standalone:true,previewAthletes:state.athletes.map(({id,name})=>({id,name}))};
     else if(route==='demo'&&method==='POST'){
@@ -55,7 +59,8 @@ export function createLocalDemo(storage){
       else if(route==='ai/program-draft'){coach();throw Error('Live AI generation needs your computer backend or a hosted Iron Heart server. Connect in Account & settings. No program was changed or saved.');}
       else if(route==='ai/approve'&&method==='POST'){coach();result=draftSaves.approve(b,state.exercises,user.id);}
       else if(route==='ai/programs'&&method==='POST'){
-        coach();return clone(draftSaves.save(b,state.exercises,user.id,p=>{const saved=save('programs',prepareProgram(p,state.exercises));storage.setItem(KEY,JSON.stringify(state));return saved;}));
+        coach();return clone(draftSaves.save(b,state.exercises,user.id,p=>{const saved=save('programs',prepareProgram(p,state.exercises));if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){state.workoutReceipts={...(state.workoutReceipts||{}),[receiptKey]:{id:result.id,payload:JSON.stringify({route,b})}};}
+    storage.setItem(KEY,JSON.stringify(state));return saved;}));
       }
       else if(['programs','exercises'].includes(route)&&method==='POST'){
         coach();if(!b.name?.trim())throw Error('Enter a name.');
@@ -105,6 +110,7 @@ export function createLocalDemo(storage){
       }else throw Error('This action is not available in the phone preview.');
     }
     // Persist before acknowledging success; quota failures leave the prior state intact.
+    if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){state.workoutReceipts={...(state.workoutReceipts||{}),[receiptKey]:{id:result.id,payload:JSON.stringify({route,b})}};}
     storage.setItem(KEY,JSON.stringify(state));
     return route==='data'?normalizeData(result):clone(result);
   };

@@ -1,3 +1,4 @@
+import {workoutReceipts} from './workout-receipts.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
 import {createScanService} from './ai/scan.mjs';
 import http from 'node:http';
@@ -25,6 +26,7 @@ const demo=process.env.DEMO_MODE === 'true' || (!production && process.env.DEMO_
 if (production && demo) throw new Error('Demo mode cannot run in production. Use a separate production database.');
 const store=openStore(process.env.DB_PATH || `./data/${demo?'demo':'iron-heart'}.sqlite`,demo);
 const {db,all,get,put,addUser}=store;
+const workoutReceipt=workoutReceipts(store);
 if (!demo && db.prepare("SELECT id FROM users WHERE email LIKE '%@ironheart.demo' LIMIT 1").get()) throw new Error('Demo database cannot be used in production.');
 const publicUser = u => ({id:u.id,email:u.email,name:u.name,role:u.role,sport:u.sport});
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
@@ -112,16 +114,15 @@ const server=http.createServer(async(req,res)=>{
       else if(route==='/api/assignment'&&req.method==='PUT'){coach();const a=owned(b.id);const week=a.plan.find(w=>w.week===b.week);if(!week||!week.sessions[b.session])fail(400,'Session not found.');Object.assign(week.sessions[b.session],checked(()=>prepareSession({...week.sessions[b.session],exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},all('exercise'))));result=put('assignment',a,a.athleteId);}
       else if(route==='/api/tracker'&&req.method==='POST'){
         if(u.role!=='athlete')fail(403,'Sign in as an athlete to journal a workout.');
-        const workout=checked(()=>prepareTrackerWorkout(b,all('exercise')));
-        result=put('log',{...workout,id:randomUUID(),athleteId:u.id,createdAt:new Date().toISOString()},u.id);
+        const receipt=workoutReceipt(u.id,route,b);if(receipt.result)result=receipt.result;else{const workout=checked(()=>prepareTrackerWorkout(receipt.payload,all('exercise')));result=receipt.commit(()=>put('log',{...workout,id:randomUUID(),athleteId:u.id,createdAt:new Date().toISOString()},u.id));}
       }
       else if(route==='/api/log'&&req.method==='POST'){
-        if(u.role!=='athlete')fail(403,'Sign in as an athlete to record a workout.');const a=owned(b.assignmentId);const w=a.plan.find(w=>w.week===b.week);const s=w?.sessions[b.session];if(!s||s.cancelled)fail(400,'Session not found or removed from calendar.');if(!num(b.readiness,1,5)||!Number.isInteger(b.readiness)||typeof b.pain!=='boolean'||!str(b.notes||'',0,2000))fail(400,'Check workout feedback.');
+        if(u.role!=='athlete')fail(403,'Sign in as an athlete to record a workout.');const receipt=workoutReceipt(u.id,route,b);if(receipt.result)result=receipt.result;else{const a=owned(b.assignmentId);const w=a.plan.find(w=>w.week===b.week);const s=w?.sessions[b.session];if(!s||s.cancelled)fail(400,'Session not found or removed from calendar.');if(!num(b.readiness,1,5)||!Number.isInteger(b.readiness)||typeof b.pain!=='boolean'||!str(b.notes||'',0,2000))fail(400,'Check workout feedback.');
         if(!Array.isArray(b.exercises)||b.exercises.length!==s.exercises.length)fail(400,'Log every exercise.');
         const blockResults=checked(()=>recordBlockScores(b.blockResults,s.blocks));
         const recorded=checked(()=>recordPerformance(b.exercises,s.exercises,all('exercise')));
         if(all('log').some(l=>l.assignmentId===a.id&&l.week===b.week&&l.session===b.session))fail(409,'This session is already recorded.');
-        result=put('log',{id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),readiness:b.readiness,pain:b.pain,notes:b.notes||'',exercises:recorded,...(blockResults.length?{blockResults,blocks:s.blocks}:{})},u.id);
+        result=receipt.commit(()=>put('log',{id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),readiness:b.readiness,pain:b.pain,notes:b.notes||'',exercises:recorded,...(blockResults.length?{blockResults,blocks:s.blocks}:{})},u.id));}
       }
       else if(route==='/api/recommendations'&&req.method==='GET'){coach();const a=owned(url.searchParams.get('id'));const week=a.plan.find(w=>w.week===Number(url.searchParams.get('week')));if(!week)fail(400,'Week not found.');result=week.sessions.flatMap((s,si)=>s.exercises.map((e,ei)=>{const history=all('log').filter(l=>l.athleteId===a.athleteId&&l.source!=='tracker').sort((x,y)=>x.createdAt.localeCompare(y.createdAt)).flatMap(l=>l.exercises.filter(x=>x.exerciseId===e.exerciseId).map(x=>({...x,pain:l.pain,readiness:l.readiness})));return {session:si,index:ei,exerciseId:e.exerciseId,current:e.load,...recommend(e,history)};}));}
       else if(route==='/api/account'&&req.method==='DELETE'){if(u.role!=='athlete')fail(400,'Coach account removal requires administrator maintenance.');db.prepare('DELETE FROM records WHERE owner=?').run(u.id);db.prepare('DELETE FROM users WHERE id=?').run(u.id);res.setHeader('Set-Cookie','ihs_session=; HttpOnly; Path=/; Max-Age=0');result={ok:true};}

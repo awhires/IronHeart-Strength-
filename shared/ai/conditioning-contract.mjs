@@ -1,0 +1,30 @@
+import {AI_DRAFT_SCHEMA,EXERCISE_SCHEMA,SESSION_SCHEMA} from './contract.mjs';
+import {CARDIO_TYPES} from '../tracking.mjs';
+import {SCORE_TYPES,BLOCK_TYPES} from '../workout-blocks.mjs';
+const num=(max=86400)=>({type:['number','null'],minimum:0,maximum:max});
+const txt={type:'string',maxLength:2000};
+const optionalText={type:['string','null'],maxLength:2000};
+const obj=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
+const id={type:['string','null'],maxLength:200};
+const distanceUnit={type:['string','null'],enum:[null,'m','km','mi','yd']};
+export const CARDIO_EXERCISE_SCHEMA=obj({exerciseId:id,exerciseName:{type:'string',minLength:1,maxLength:200},trackingType:{type:'string',enum:CARDIO_TYPES},intervalCount:{type:'integer',minimum:1,maximum:30},restSeconds:num(3600),metrics:obj({distance:num(1000000),distanceUnit,durationSeconds:num(),paceSeconds:num(),speedMph:num(60),watts:num(10000),cadence:num(500),calories:num(100000),incline:num(100),level:num(100),steps:num(1000000),floors:num(10000),rpe:num(10)},[]),notes:txt,progressionInstructions:txt});
+export const METCON_MOVEMENT_SCHEMA=obj({exerciseId:id,exerciseName:{type:'string',minLength:1,maxLength:200},reps:num(10000),distance:num(1000000),distanceUnit,calories:num(10000),load:num(10000),loadUnit:{type:['string','null'],enum:[null,'lbs','kg']},minute:num(10000),notes:optionalText},['exerciseId','exerciseName']);
+const option=structuredClone(METCON_MOVEMENT_SCHEMA);option.properties.repScheme={type:['array','null'],maxItems:100,items:{type:'integer',minimum:1,maximum:10000}};
+METCON_MOVEMENT_SCHEMA.properties.scalingOptions={type:['array','null'],maxItems:10,items:option};
+export const METCON_SCHEMA=obj({name:{type:'string',minLength:1,maxLength:200},scoreType:{type:'string',enum:SCORE_TYPES},repScheme:{type:'array',maxItems:100,items:{type:'integer',minimum:1,maximum:1000}},movements:{type:'array',minItems:1,maxItems:30,items:METCON_MOVEMENT_SCHEMA},rounds:num(),durationSeconds:num(),timeCapSeconds:num(),workSeconds:num(),restSeconds:num(),notes:optionalText},['name','scoreType','repScheme','movements']);
+export const BLOCK_SCHEMA={anyOf:[obj({id:{type:'string',minLength:1,maxLength:200},type:{const:'Metcon'},name:txt,metcon:METCON_SCHEMA}),obj({id:{type:'string',minLength:1,maxLength:200},type:{type:'string',enum:BLOCK_TYPES.filter(t=>t!=='Metcon')},name:txt,exerciseIndexes:{type:'array',minItems:1,maxItems:15,items:{type:'integer',minimum:0,maximum:14}}})]};
+export const AI_DRAFT_SCHEMA_V2=structuredClone(AI_DRAFT_SCHEMA);
+AI_DRAFT_SCHEMA_V2.title='Iron Heart AI Workout Draft v2';
+AI_DRAFT_SCHEMA_V2.properties.schemaVersion={const:2};
+const session=structuredClone(SESSION_SCHEMA);
+session.properties.exercises={type:'array',minItems:0,maxItems:15,items:{anyOf:[EXERCISE_SCHEMA,CARDIO_EXERCISE_SCHEMA]}};
+session.properties.blocks={type:'array',maxItems:20,items:BLOCK_SCHEMA};
+session.required.push('blocks');
+AI_DRAFT_SCHEMA_V2.properties.program.properties.plan.items.properties.sessions.items=session;
+export function conditioningSession(session){
+ const out=structuredClone(session);
+ if(!out.blocks?.length)delete out.blocks;
+ out.exercises=out.exercises.map(e=>e.trackingType?{...e,restSeconds:e.restSeconds??0,metrics:Object.fromEntries(Object.entries(e.metrics||{}).filter(([,v])=>v!=null))}:e);
+ if(out.blocks)out.blocks=out.blocks.map(b=>b.type==='Metcon'?{...b,metcon:{...b.metcon,notes:b.metcon.notes||''}}:b);
+ return out;
+}

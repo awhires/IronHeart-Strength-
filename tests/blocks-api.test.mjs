@@ -16,9 +16,11 @@ test('live mixed blocks: coach saves/assigns, athlete logs, scores persist and i
  const metcon={name:'Row AMRAP',scoreType:'AMRAP',durationSeconds:720,repScheme:[],movements:[{exerciseId:'rowerg',distance:200,distanceUnit:'m'}],notes:''};
  const p=await req('programs','POST',{name:'Mixed',goal:'Fitness',weeks:4,sessions:[{name:'Day',day:1,exercises:[{exerciseId:'rowerg',trackingType:'erg',metrics:{durationSeconds:330,distance:1000,distanceUnit:'m',paceSeconds:104}}],blocks:[{id:'c',type:'Cardio',exerciseIndexes:[0]},{id:'m',type:'Metcon',metcon}]}]},coach);assert.equal(p.status,200,JSON.stringify(p.data));
  const a=await req('assign','POST',{programId:p.data.id,athleteId:'jordan',startDate:'2026-10-05'},coach);assert.equal(a.status,200);
- const body={assignmentId:a.data.id,week:1,session:0,readiness:3,pain:false,notes:'',exercises:[{exerciseId:'rowerg',sets:[{durationSeconds:330,distance:1000,distanceUnit:'m',paceSeconds:104}]}],blockResults:[{blockId:'m',score:{rx:'RX',rounds:5,reps:14}}]};
+ const body={clientRequestId:crypto.randomUUID(),assignmentId:a.data.id,week:1,session:0,readiness:3,pain:false,notes:'',exercises:[{exerciseId:'rowerg',sets:[{durationSeconds:330,distance:1000,distanceUnit:'m',paceSeconds:104}]}],blockResults:[{blockId:'m',score:{rx:'RX',rounds:5,reps:14}}]};
  assert.equal((await req('log','POST',{...body,blockResults:[]},athlete)).status,400);
  const saved=await req('log','POST',body,athlete);assert.equal(saved.status,200,JSON.stringify(saved.data));assert.equal(saved.data.blockResults[0].score.reps,14);assert.equal(saved.data.exercises[0].sets[0].paceSeconds,104);
+ assert.equal((await req('log','POST',body,athlete)).data.id,saved.data.id);
+ assert.equal((await req('data','GET',null,athlete)).data.logs.length,1);
  assert.equal((await req('delete','POST',{kind:'exercise',id:'rowerg'},coach)).status,409);
  const edit=await req('assignment','PUT',{id:a.data.id,week:1,session:0,exercises:[],blocks:[{id:'m',type:'Metcon',metcon:{...metcon,name:'Changed'}}]},coach);assert.equal(edit.status,200,JSON.stringify(edit.data));
  const after=await req('data','GET',null,athlete);assert.equal(after.data.logs.find(l=>l.id===saved.data.id).blockResults[0].metcon.name,'Row AMRAP');
