@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Current Iron Heart backend and phone preview
+node_modules/
+dist/
+data/
+.env
+.env.*
+output/
+*.log
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+*.jks
+*.keystore
+test-results/
+.pnpm-store/
+tmp/

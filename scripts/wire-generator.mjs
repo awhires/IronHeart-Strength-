@@ -1,0 +1,15 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+let s=readFileSync('src/main.jsx','utf8');
+s=s.replace("import './styles.css';","import './styles.css';\nimport ProgressionGenerator from './ProgressionGenerator.jsx';");
+const start=s.indexOf('function ProgramEditor('),end=s.indexOf('function ExerciseRows(',start);
+if(start<0||end<0)throw Error('Editor not found');
+s=s.slice(0,start)+readFileSync('tmp/ProgramEditor.jsx.txt','utf8')+'\n'+s.slice(end);
+s=s.replace("['sets','Sets',1,10,1]","['sets','Sets',1,12,1]");
+writeFileSync('src/main.jsx',s);
+let api=readFileSync('server/index.mjs','utf8').replace('![4,8,12].includes(p.weeks)','![3,4,6,8,9,12].includes(p.weeks)').replace('4/8/12 week duration','3/4/6/8/9/12 week duration').replace('num(e.sets,1,10)','num(e.sets,1,12)').replace('sets 1–10','sets 1–12');
+api=api.replace("all('program').some(p=>p.sessions.some(s=>s.exercises.some(e=>e.exerciseId===b.id)))", "all('program').some(p=>[p.sessions,...(p.plan||[]).map(w=>w.sessions)].some(sessions=>sessions.some(s=>s.exercises.some(e=>e.exerciseId===b.id))))");
+writeFileSync('server/index.mjs',api);
+let generator=readFileSync('src/ProgressionGenerator.jsx','utf8').replace('Dynamic effort uses repeating 50/55/60% bar-weight waves with no bands or chains. Squat uses','Squat uses repeating 50/55/60% bar-weight waves; bench uses the published 45/50/55% bar-weight component, adapted here without bands or chains. Squat uses');
+writeFileSync('src/ProgressionGenerator.jsx',generator);
+let model=readFileSync('server/progression.mjs','utf8').replace('rule.referenceMax*[.5,.55,.6][wave]',"rule.referenceMax*(rule.mode==='speed-bench'?[.45,.5,.55]:[.5,.55,.6])[wave]");
+writeFileSync('server/progression.mjs',model);

@@ -1,0 +1,7 @@
+{
+  "appId": "com.ironheartstrength.app",
+  "appName": "Iron Heart Strength",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

@@ -1,0 +1,13 @@
+import { readFileSync,writeFileSync } from 'node:fs';
+const path='src/main.jsx';let code=readFileSync(path,'utf8');
+function replace(a,b){if(!code.includes(a))throw Error('Missing expected source: '+a.slice(0,70));code=code.replace(a,b);}
+replace("if(date>=localDate(a.startDate))events.push", "if(!s.cancelled&&date>=localDate(a.startDate))events.push");
+replace("const logged=logFor(a,w,si);if(logged)","if(a.plan[w-1].sessions[si].cancelled&&!isCoach)return;const logged=logFor(a,w,si);if(logged)");
+replace("text:kind==='log'?", "text:kind==='athlete'?'This permanently removes the athlete account, assigned programs, and workout history.':kind==='log'?");
+replace("<Badge>{a.sport}</Badge></div><h3>{a.name}</h3>","<div className=\"row\"><Badge>{a.sport}</Badge><button className=\"icon-button danger\" aria-label={`Delete athlete ${a.name}`} onClick={()=>remove('athlete',a)}><Trash2 size={15}/></button></div></div><h3>{a.name}</h3>");
+replace("<Button variant={logFor(chosen,planWeek,si)?'secondary':''}","{s.cancelled&&<p className=\"footnote\">Removed from calendar.{isCoach&&<button className=\"text-button\" onClick={()=>perform(()=>api('session-status','POST',{id:chosen.id,week:planWeek,session:si,cancelled:false}),'Session restored',false)}>Restore session</button>}</p>}<Button disabled={s.cancelled&&!isCoach} variant={logFor(chosen,planWeek,si)?'secondary':''}");
+replace("<SessionEditor modal={modal} exercises={data.exercises} busy={busy} onSave=", "<SessionEditor modal={modal} exercises={data.exercises} busy={busy} onRemove={()=>show('confirm',{title:'Remove session from calendar?',text:'This removes only this week’s session. You can restore it from the athlete’s program. Any completed workout log is kept.',action:()=>perform(()=>api('session-status','POST',{id:modal.assignment.id,week:modal.week,session:modal.session,cancelled:true}),'Session removed')})} onSave=");
+replace("function SessionEditor({modal,exercises,busy,onSave})", "function SessionEditor({modal,exercises,busy,onSave,onRemove})");
+replace("<Button disabled={busy}><Check size={16}/>Save athlete’s session</Button>", "<Button type=\"button\" variant=\"danger-outline\" disabled={busy} onClick={onRemove}><Trash2 size={15}/>Remove from calendar</Button><Button disabled={busy}><Check size={16}/>Save athlete’s session</Button>");
+replace("program:clone({...data.programs[0],id:undefined,name:'New strength program'})", "program:{name:'New strength program',goal:'Build strength',weeks:8,description:'',sessions:[{name:'Session A',day:1,exercises:[blankItem(data.exercises[0]?.id)]}]}");
+writeFileSync(path,code);
