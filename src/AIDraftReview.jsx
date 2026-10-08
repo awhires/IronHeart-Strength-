@@ -24,6 +24,7 @@ function NumberInput({value,onChange,...props}){return <input type="number" valu
 export default function AIDraftReview({exercises,coachId,request,onSaved,initialGeneration,onRegenerate}){
   const [review,setReview]=useState(()=>createReview(initialGeneration?.draft||createFixture())),[weekIndex,setWeekIndex]=useState(0),[fixture,setFixture]=useState('valid'),[warningsReviewed,setWarningsReviewed]=useState(false),[converted,setConverted]=useState(null),[actionError,setActionError]=useState(''),[receipt,setReceipt]=useState(null),[pending,setPending]=useState(false),[saved,setSaved]=useState(null);
   const requirements=initialGeneration?.requirements||FIXTURE_REQUIREMENTS;
+  const programming=initialGeneration?.programming;
   const draft=review.draft,p=draft.program;
   const validation=useMemo(()=>validateDraft(draft,exercises,requirements),[draft,exercises,requirements]);
   const approved=isApproved(review,exercises,requirements);
@@ -36,8 +37,8 @@ export default function AIDraftReview({exercises,coachId,request,onSaved,initial
   const reference=(si,ei,key,value)=>edit(d=>{d.program.plan[weekIndex].sessions[si].exercises[ei].reference1RM[key]=value;});
   const field=(label,path,child)=> <Field label={label} path={path} findings={findings}>{child}</Field>;
   const loadFixture=kind=>{setReceipt(null);setSaved(null);setFixture(kind);setReview(createReview(createFixture(kind)));setWeekIndex(0);setWarningsReviewed(false);setConverted(null);setActionError('');};
-  const approve=async()=>{setPending(true);try{const next=approveReview(review,exercises,requirements,{coachId,warningsReviewed});const result=await request('ai/approve','POST',{review:next,requirements});setReview(next);setReceipt(result.receipt);setActionError('');}catch(e){setActionError(e.message);}finally{setPending(false);}};
-  const save=async()=>{setPending(true);setActionError('');try{const result=await request('ai/programs','POST',{review,requirements,receipt});setSaved(result);await onSaved?.(result);}catch(e){setActionError(e.message);if(/Approval expired|exact draft revision/.test(e.message)){setReceipt(null);setReview(r=>({...r,approval:null,draft:{...r.draft,status:DRAFT_STATUS.NEEDS_REVIEW}}));}}finally{setPending(false);}};
+  const approve=async()=>{setPending(true);try{const next=approveReview(review,exercises,requirements,{coachId,warningsReviewed});const result=await request('ai/approve','POST',{review:next,requirements,...(programming?{programming}:{})});setReview(next);setReceipt(result.receipt);setActionError('');}catch(e){setActionError(e.message);}finally{setPending(false);}};
+  const save=async()=>{setPending(true);setActionError('');try{const result=await request('ai/programs','POST',{review,requirements,receipt,...(programming?{programming}:{})});setSaved(result);await onSaved?.(result);}catch(e){setActionError(e.message);if(/Approval expired|exact draft revision/.test(e.message)){setReceipt(null);setReview(r=>({...r,approval:null,draft:{...r.draft,status:DRAFT_STATUS.NEEDS_REVIEW}}));}}finally{setPending(false);}};
   const convert=()=>{try{setConverted(toIronHeartProgram(review,exercises,requirements));setActionError('');}catch(e){setActionError(e.message);}};
   const w=p.plan[weekIndex];
   return <div className="ai-review"><fieldset disabled={pending} className="ai-review-controls">

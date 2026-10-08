@@ -1,5 +1,6 @@
 import {isApproved} from './draft-state.mjs';
 import {toIronHeartProgram} from './convert.mjs';
+import {validateProgrammingOptions,PROGRAMMING_RULES_VERSION} from './programming-options.mjs';
 
 // Authenticated adapters own this receipt store. Model output cannot mint receipts.
 // Receipts expire after 30 minutes and are bound to coach, complete review, and requirements.
@@ -7,9 +8,10 @@ import {toIronHeartProgram} from './convert.mjs';
 export function createDraftSaveService(newId,now=()=>Date.now()){
   const receipts=new Map();
   const check=(input,library,coachId)=>{
+    validateProgrammingOptions(input?.programming);
     if(!input?.review||input.review.approval?.coachId!==coachId||!isApproved(input.review,library,input.requirements||{}))throw Error('This exact draft revision must be approved by you before saving.');
   };
-  const content=input=>JSON.stringify({review:input.review,requirements:input.requirements||{}});
+  const content=input=>JSON.stringify({review:input.review,requirements:input.requirements||{},...(input.programming?{programming:validateProgrammingOptions(input.programming)}:{})});
   return {
     approve(input,library,coachId){
       check(input,library,coachId);
@@ -24,6 +26,8 @@ export function createDraftSaveService(newId,now=()=>Date.now()){
       check(input,library,coachId);
       if(r.result)return structuredClone(r.result);
       const program=toIronHeartProgram(input.review,library,input.requirements||{});
+      const programming=validateProgrammingOptions(input.programming);
+      if(programming){program.modality=programming.modality;program.aiProvenance={...program.aiProvenance,programmingModality:programming.modality,methodologyVersion:PROGRAMMING_RULES_VERSION};}
       // Never take an ID from the draft or its sourceProgramId.
       const result=persist({...program,id:newId()});
       r.result=structuredClone(result);

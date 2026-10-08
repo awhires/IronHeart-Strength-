@@ -1,3 +1,4 @@
+import {validateProgrammingOptions,methodologyContext} from '../../shared/ai/programming-options.mjs';
 import {trackingProfile} from '../../shared/tracking.mjs';
 import {randomUUID} from 'node:crypto';
 import {createOpenAIProvider,GenerationError} from './openai.mjs';
@@ -9,7 +10,7 @@ const reject=message=>{throw new GenerationError('INVALID_REQUEST',message,400);
 const bound=(value,fallback,min,max)=>{const n=Number(value??fallback);return Number.isInteger(n)&&n>=min&&n<=max?n:fallback;};
 export function generationConfig(env=process.env){const gemini=env.AI_PROVIDER==='gemini';return {enabled:env.AI_ENABLED==='true',provider:env.AI_PROVIDER||'openai',apiKey:(gemini?env.GEMINI_API_KEY:env.OPENAI_API_KEY)||'',model:gemini?(env.GEMINI_MODEL||'gemini-3.6-flash'):(env.OPENAI_MODEL||'gpt-4.1-mini'),timeoutMs:bound(env.AI_TIMEOUT_MS,120000,1000,180000),maxOutputTokens:bound(env.AI_MAX_OUTPUT_TOKENS,24000,1000,32768),requestsPerHour:bound(env.AI_REQUESTS_PER_HOUR,6,1,30),debug:env.AI_DEBUG==='true'};}
 export function validateGenerationInput(input,library){
-  if(!object(input)||Object.keys(input).some(k=>!['request','athleteId','requirements'].includes(k)))reject('Use request, optional athleteId, and optional confirmed requirements.');
+  if(!object(input)||Object.keys(input).some(k=>!['request','athleteId','requirements','programming'].includes(k)))reject('Use request, optional athleteId, and optional confirmed requirements.');
   if(typeof input.request!=='string'||input.request.trim().length<10||input.request.length>2000||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(input.request))reject('Enter a training request between 10 and 2000 characters.');
   if(input.athleteId!=null&&(typeof input.athleteId!=='string'||!input.athleteId||input.athleteId.length>200))reject('Choose a valid athlete.');
   const requirements=structuredClone(input.requirements||{});
@@ -19,7 +20,7 @@ export function validateGenerationInput(input,library){
   if(requirements.exerciseFrequency!==undefined){if(!object(requirements.exerciseFrequency)||Object.keys(requirements.exerciseFrequency).length>30)reject('Invalid exercise frequencies.');for(const [id,value] of Object.entries(requirements.exerciseFrequency))if(!library.some(e=>e.id===id)||!Number.isInteger(value)||value<0||value>7)reject('Frequencies need a library exercise and 0–7 days.');}
   if(requirements.primaryExerciseIds!==undefined&&(!Array.isArray(requirements.primaryExerciseIds)||requirements.primaryExerciseIds.length>30||requirements.primaryExerciseIds.some(id=>!library.some(e=>e.id===id))))reject('Choose valid library IDs for RPE checks.');
   if(requirements.unavailableEquipment!==undefined&&(!Array.isArray(requirements.unavailableEquipment)||requirements.unavailableEquipment.length>20||requirements.unavailableEquipment.some(x=>typeof x!=='string'||!x.trim()||x.length>80)))reject('List unavailable equipment using short names.');
-  return {request:input.request,athleteId:input.athleteId??null,requirements};
+  let programming;try{programming=validateProgrammingOptions(input.programming);}catch(e){reject(e.message);}return {request:input.request,athleteId:input.athleteId??null,requirements,...(programming?{programming}:{})};
 }
 // No storage/write APIs are accepted by this service. Context is an explicit allowlist.
 export function createGenerationService({config=generationConfig(),provider,production=false,now=()=>Date.now(),newId=randomUUID}={}){
@@ -39,6 +40,7 @@ export function createGenerationService({config=generationConfig(),provider,prod
       attempts.set(coachId,[...recent,time]);active.add(coachId);
       try{
         const context={exercise_library:library.map(e=>({exerciseId:e.id,name:e.name,region:e.region,equipment:e.equipment,movementPattern:e.pattern,trackingType:trackingProfile(e)})),confirmed_requirements:value.requirements,athlete:athlete?{sport:athlete.sport}:null};
+        if(value.programming)context.iron_heart_methodology=methodologyContext(value.programming);
         if(JSON.stringify(context).length>60000)reject('Exercise context is too large. Reduce the library size.');
         let output;try{output=await adapter.generateProgramDraft(value.request,context);}catch(e){if(e instanceof GenerationError)throw e;throw new GenerationError('PROVIDER_UNAVAILABLE','AI generation failed. Try again later.');}
         if(!object(output)||Buffer.byteLength(JSON.stringify(output))>80000)throw new GenerationError('INVALID_OUTPUT','AI returned an invalid or oversized draft. Request a smaller block.');
@@ -48,7 +50,7 @@ export function createGenerationService({config=generationConfig(),provider,prod
         const validation=validateDraft(draft,library,value.requirements);
         draft.validationFindings=validation.findings;draft.status=validation.findings.length?DRAFT_STATUS.NEEDS_REVIEW:DRAFT_STATUS.DRAFT;
         const metadata={provider:adapter.name,model:adapter.model,generatedAt:new Date(now()).toISOString(),schemaVersion:draft.schemaVersion,durationMs:Math.max(0,now()-time)};
-        return {generationId:newId(),draft,requirements:value.requirements,validation,metadata,...(config.debug&&!production?{debug:{coachRequest:value.request,structuredResponse:structuredClone(draft),validationFindings:validation.findings,durationMs:metadata.durationMs}}:{})};
+        return {generationId:newId(),draft,requirements:value.requirements,...(value.programming?{programming:value.programming}:{}),validation,metadata,...(config.debug&&!production?{debug:{coachRequest:value.request,structuredResponse:structuredClone(draft),validationFindings:validation.findings,durationMs:metadata.durationMs}}:{})};
       }finally{active.delete(coachId);}
     }
   };

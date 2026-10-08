@@ -1,3 +1,4 @@
+import {validateProgramMetadata} from './program-schedule.mjs';
 import {cardioPrescription,cardioTargetText,validateCardioPrescription} from './cardio-prescriptions.mjs';
 import {prepareBlocks} from './workout-blocks.mjs';
 import {trackingProfile,setSummary,CARDIO_TYPES} from './tracking.mjs';
@@ -105,7 +106,7 @@ export function prepareProgram(input,library){
     p.plan=p.plan.map((w,i)=>{if(!object(w)||w.week!==i+1)throw Error('Weeks must be sequential.');return {...w,sessions:sessions(w.sessions)};});
     p.sessions=p.plan[0].sessions;
   }else p.sessions=sessions(p.sessions);
-  return p;
+  return validateProgramMetadata(p);
 }
 export function recordPerformance(entries,targets,library=[]){
   if(!Array.isArray(entries)||entries.length!==targets.length)throw Error('Log every exercise.');
@@ -127,12 +128,14 @@ export function normalizeData(data){
   const result=structuredClone(data);
   const sessions=ss=>ss?.forEach(s=>{s.exercises=s.exercises.map(e=>cardioPrescription(e,result.exercises?.find(x=>x.id===e.exerciseId))||normalizePrescription(e));});
   result.programs?.forEach(p=>{sessions(p.sessions);p.plan?.forEach(w=>sessions(w.sessions));});
+  result.discover?.forEach(p=>{sessions(p.sessions);p.plan?.forEach(w=>sessions(w.sessions));});
   result.assignments?.forEach(a=>a.plan.forEach(w=>sessions(w.sessions)));
   result.logs?.forEach(l=>l.exercises.forEach(e=>{if(e.target)e.target=cardioPrescription(e.target,result.exercises?.find(x=>x.id===e.exerciseId))||normalizePrescription(e.target);}));
   return result;
 }
 
 export function prepareSession(s,library){
+ validateProgramMetadata({sessions:[s]});
  const items=s.exercises||[];
  const exercises=items.length?prepareItems(items,library):[];
  const blocks=prepareBlocks(s.blocks,exercises,library);
