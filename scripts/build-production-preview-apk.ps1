@@ -1,4 +1,4 @@
-param([string]$BackendUrl='https://ironheart-strength-1.onrender.com', [string]$Version='1.6')
+param([string]$BackendUrl='https://ironheart-strength-1.onrender.com', [string]$Version='1.7')
 $ErrorActionPreference='Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $projectRoot=(Get-Location).Path

@@ -1,4 +1,4 @@
-import {calculatedCardioMetrics} from './cardio-prescriptions.mjs';
+import {calculatedCardioMetrics,validateCardioPrescription} from './cardio-prescriptions.mjs';
 import {trackingProfile,FIELDS,expandBlocks,MODIFIERS,complexLabel,DISTANCE_METERS,CARDIO_TYPES} from './tracking.mjs';
 import {inPounds} from './ai/contract.mjs';
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
@@ -30,7 +30,11 @@ export function prepareJournalEntry(entry,exercise,library){
   if(trackingType==='loadedTimed'&&out.load==null)throw Error('Enter the hold load.');
   if(trackingType==='carry'&&(!(out.distance>0)||out.load==null))throw Error('Enter carry load and distance.');
   if(CARDIO_TYPES.includes(trackingType)&&!(out.durationSeconds>0)&&!(out.distance>0))throw Error('Enter cardio duration or distance.');
-  if(!strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10))throw Error('Check optional cardio RPE 1–10.');if(CARDIO_TYPES.includes(trackingType)){const computed=calculatedCardioMetrics(out,trackingType);for(const k of ["paceSeconds","speedMph"])if(out[k]==null&&computed[k]!=null)out[k]=+computed[k].toFixed(6);}}
+  if(s.paceUnit!=null){if(trackingType!=='running'||!['mi','km'].includes(s.paceUnit))throw Error('Running pace uses mi or km.');out.paceUnit=s.paceUnit;}
+  if(!strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10))throw Error('Check optional cardio RPE 1–10.');if(CARDIO_TYPES.includes(trackingType)){const computed=calculatedCardioMetrics(out,trackingType);if(computed.paceUnit&&(s.paceUnit!=null||out.paceSeconds==null))out.paceUnit=computed.paceUnit;for(const k of ["paceSeconds","speedMph"])if(out[k]==null&&computed[k]!=null)out[k]=+computed[k].toFixed(6);}}
+
+  if(s.completed!=null){if(typeof s.completed!=='boolean')throw Error('Check interval completion.');out.completed=s.completed;}
+  if(s.recoverySeconds!=null){if(!optional(s.recoverySeconds,0,3600))throw Error('Check actual recovery (0–3600 seconds).');out.recoverySeconds=s.recoverySeconds;}
   if(s.blockIndex!=null)out.blockIndex=s.blockIndex;
   return out;
  });
@@ -38,16 +42,17 @@ export function prepareJournalEntry(entry,exercise,library){
  if(!Array.isArray(intervals)||intervals.length>20||(!CARDIO_TYPES.includes(trackingType)&&intervals.length))throw Error('Intervals are for cardio; use at most 20 blocks.');
  const cleanIntervals=intervals.map(b=>{
   if(!Number.isInteger(b.rounds)||b.rounds<1||b.rounds>100)throw Error('Use 1–100 interval rounds.');
-  const phase=p=>{
+  const phase=(p,recovery=false)=>{
+   if(recovery&&p&&Object.values(p).every(v=>v==null||v===0||typeof v==='string'))return {};
    if(!p||!(p.durationSeconds>0||p.distance>0))throw Error('Each interval work/recovery phase needs time or distance.');
    const result={};for(const k of FIELDS[trackingType])if(p[k]!=null){if(!optional(p[k],0,k==='durationSeconds'||k==='paceSeconds'?86400:1000))throw Error('Check interval metrics.');result[k]=p[k];}
    if(p.distance!=null||p.paceSeconds!=null){if(!DISTANCE_METERS[p.distanceUnit])throw Error('Check interval distance unit.');result.distanceUnit=p.distanceUnit;}
    return result;
-  };return {rounds:b.rounds,work:phase(b.work),recovery:phase(b.recovery)};
+  };return {rounds:b.rounds,work:phase(b.work),recovery:phase(b.recovery,true)};
  });
  if(typeof(entry.notes??'')!=='string'||(entry.notes||'').length>2000)throw Error('Exercise notes must be shorter than 2000 characters.');
  return {exerciseId:exercise.id,exerciseName:exercise.name,sets,
   ...(strength?{}:{trackingType}),...(entry.blocks?{setBlocks:entry.blocks.map((b,i)=>({count:b.count,...sets.find(s=>s.blockIndex===i)}))}:{}),
   ...(parts.length?{complex:parts,complexText:complexLabel(parts,library),volumeEligible:parts.every(p=>p.exerciseId===exercise.id)}:{}),
-  ...(cleanIntervals.length?{intervals:cleanIntervals}:{}),...(entry.notes?{notes:entry.notes}:{})};
+  ...(entry.target?{target:validateCardioPrescription(entry.target,library)}:{}),...(cleanIntervals.length?{intervals:cleanIntervals}:{}),...(entry.notes?{notes:entry.notes}:{})};
 }

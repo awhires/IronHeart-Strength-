@@ -6,7 +6,7 @@ export function cardioMetrics(s,type){
  const unit=s.distanceUnit||'mi';
  let meters=null;try{if(positive(s.distance))meters=convertDistance(s.distance,unit,'m');}catch{}
  const seconds=positive(s.durationSeconds)?s.durationSeconds:null;
- const paceBase=type==='erg'?500:type==='swimming'?(unit==='yd'?91.44:100):unit==='km'?1000:unit==='m'?1:unit==='yd'?.9144:1609.344;
+ const paceUnit=s.paceUnit||unit;const paceBase=type==='erg'?500:type==='swimming'?(unit==='yd'?91.44:100):paceUnit==='km'?1000:paceUnit==='m'?1:paceUnit==='yd'?.9144:1609.344;
  const speed=meters&&seconds?meters/seconds:positive(s.speedMph)?s.speedMph*.44704:positive(s.paceSeconds)?paceBase/s.paceSeconds:null;
  return {meters,seconds,speed,paceSeconds:speed?paceBase/speed:null,paceBase,watts:positive(s.watts)?s.watts:null,cadence:positive(s.cadence)?s.cadence:null,calories:positive(s.calories)?s.calories:null,steps:positive(s.steps)?s.steps:null,floors:positive(s.floors)?s.floors:null};
 }
