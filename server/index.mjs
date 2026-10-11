@@ -1,3 +1,4 @@
+import {prepareStrengthGoal} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,validDate,weekdayDate} from '../shared/program-schedule.mjs';
 import {workoutReceipts} from './workout-receipts.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
@@ -85,7 +86,8 @@ const server=http.createServer(async(req,res)=>{
       const owned=id=>{const a=get('assignment',id);if(!a)fail(404,'Program not found.');if(u.role!=='coach'&&a.athleteId!==u.id)fail(403,'This program belongs to another athlete.');return a;};
       if(route==='/api/me')result=publicUser(u);
       else if(route==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(tokenHash(token));res.setHeader('Set-Cookie','ihs_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');result={ok:true};}
-      else if(route==='/api/data'&&req.method==='GET')result={user:publicUser(u),demo,exercises:all('exercise'),programs:u.role==='coach'?all('program'):[],discover:u.role==='athlete'?all('program').filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[],athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments:all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),logs:all('log').filter(l=>u.role==='coach'||l.athleteId===u.id)};
+      else if(route==='/api/data'&&req.method==='GET')result={user:publicUser(u),demo,exercises:all('exercise'),programs:u.role==='coach'?all('program'):[],discover:u.role==='athlete'?all('program').filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[],athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments:all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),strengthGoals:all('strengthGoal').filter(g=>u.role==='coach'||g.athleteId===u.id),logs:all('log').filter(l=>u.role==='coach'||l.athleteId===u.id)};
+      else if(route==='/api/strength-goal'&&req.method==='POST'){const athleteId=b.athleteId||u.id;if(u.role!=='coach'&&athleteId!==u.id)fail(403,'Access denied.');if(!db.prepare("SELECT id FROM users WHERE id=? AND role='athlete'").get(athleteId))fail(404,'Athlete not found.');result=put('strengthGoal',checked(()=>prepareStrengthGoal(b,all('exercise'),athleteId)),athleteId);}
       else if(route==='/api/enrollment-preview'&&req.method==='POST'){
         if(u.role!=='athlete')fail(403,'Athlete access required.');let a;if(b.assignmentId)a=owned(b.assignmentId);else{const p=get('program',b.programId);if(!p||!discoverable(p,u.id))fail(404,'Program unavailable.');a=assign(p,u.id,b.startDate);}result=checked(()=>proposeSchedule(a,b));
       }
@@ -109,7 +111,7 @@ const server=http.createServer(async(req,res)=>{
         if(!['program','assignment','exercise','log'].includes(b.kind))fail(400,'Invalid record type.');const record=get(b.kind,b.id);if(!record)fail(404,'Record not found.');
         if(b.kind==='log'){if(u.role!=='coach'&&record.athleteId!==u.id)fail(403,'Access denied.');}
         else coach();
-        if(b.kind==='exercise'&&[...all('program'),...all('assignment'),...all('log')].some(r=>referencesExercise(r,b.id)))fail(409,'This exercise is in use. Remove it from programs and assignments first; exercises in workout history must be kept.');
+        if(b.kind==='exercise'&&[...all('program'),...all('assignment'),...all('log'),...all('strengthGoal')].map(r=>r.exerciseId?{exercises:[r]}:r).some(r=>referencesExercise(r,b.id)))fail(409,'This exercise is in use. Remove it from programs and assignments first; exercises in workout history must be kept.');
         db.prepare('DELETE FROM records WHERE kind=? AND id=?').run(b.kind,b.id);result={ok:true};
         }
       }

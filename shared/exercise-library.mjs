@@ -50,3 +50,5 @@ export function missingLibraryExercises(existing){
  const ids=new Set(existing.map(e=>e.id)),names=new Set(existing.map(e=>normalized(e.name)));
  return additionalExercises.filter(e=>!ids.has(e.id)&&![e.name,...(aliases[e.id]||[])].some(name=>names.has(normalized(name)))).map(e=>({...e}));
 }
+
+export function missingStrengthProgressExercises(existing){return existing.some(e=>e.id==='zercher-squat'||normalized(e.name)===normalized('Zercher Squat'))?[]:[{id:'zercher-squat',name:'Zercher Squat',region:'Lower body',equipment:'Barbell',pattern:'Squat',cues:'Support the bar in the crooks of your elbows, brace, and squat with control.',video:''}];}

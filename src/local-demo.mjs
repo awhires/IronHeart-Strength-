@@ -1,3 +1,4 @@
+import {prepareStrengthGoal} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,weekdayDate} from '../shared/program-schedule.mjs';
 import {missingConditioningExercises,missingSingleUnders} from '../shared/conditioning-library.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
@@ -9,7 +10,7 @@ import { periodize, recommend } from '../server/progression.mjs';
 import { toPounds } from '../server/units.mjs';
 import {prepareProgram,prepareSession,prepareItems,recordPerformance,normalizeData} from '../shared/prescriptions.mjs';
 import {createDraftSaveService} from '../shared/ai/save-service.mjs';
-import {LIBRARY_UPDATE,missingLibraryExercises} from '../shared/exercise-library.mjs';
+import {LIBRARY_UPDATE,missingLibraryExercises,missingStrengthProgressExercises} from '../shared/exercise-library.mjs';
 const KEY='iron-heart-phone-preview-v1';
 const clone=value=>structuredClone(value);
 const id=()=>crypto.randomUUID();
@@ -34,13 +35,15 @@ export function createLocalDemo(storage){
     if(!state.libraryUpdates?.includes('tracking-library-v1')){state.exercises.push(...missingTrackingExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'tracking-library-v1'];}
     if(!state.libraryUpdates?.includes('conditioning-library-v1')){state.exercises.push(...missingConditioningExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'conditioning-library-v1'];}
     if(!state.libraryUpdates?.includes('single-unders-v1')){state.exercises.push(...missingSingleUnders(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'single-unders-v1'];}
+    state.strengthGoals??=[];
+    if(!state.libraryUpdates?.includes('strength-progress-library-v1')){state.exercises.push(...missingStrengthProgressExercises(state.exercises));state.libraryUpdates=[...(state.libraryUpdates||[]),'strength-progress-library-v1'];}
     const b=clone(body),url=new URL(path,'https://preview.local/'),route=url.pathname.slice(1);
     const user=state.active==='coach'?state.coach:state.athletes.find(a=>a.id===state.active);
     const coach=()=>{if(user?.role!=='coach')throw Error('Open Coach view to make this change.');};
     const owned=key=>{const a=state.assignments.find(a=>a.id===key);if(!a||user.role!=='coach'&&a.athleteId!==user.id)throw Error('Program not found.');return a;};
     const session=()=>{const a=owned(b.id||b.assignmentId),s=a.plan.find(w=>w.week===b.week)?.sessions[b.session];if(!s)throw Error('Session not found.');return {a,s};};
     const save=(collection,value)=>{const i=state[collection].findIndex(x=>x.id===value.id);if(i<0)state[collection].push(value);else state[collection][i]=value;return value;};
-    const eraseAthlete=key=>{state.athletes=state.athletes.filter(x=>x.id!==key);state.assignments=state.assignments.filter(x=>x.athleteId!==key);state.logs=state.logs.filter(x=>x.athleteId!==key);};
+    const eraseAthlete=key=>{state.strengthGoals=state.strengthGoals.filter(x=>x.athleteId!==key);state.athletes=state.athletes.filter(x=>x.id!==key);state.assignments=state.assignments.filter(x=>x.athleteId!==key);state.logs=state.logs.filter(x=>x.athleteId!==key);};
     const requestId=b.clientRequestId;delete b.clientRequestId;
     const receiptKey=requestId&&user?`${user.id}:${requestId}`:null;
     if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){const old=state.workoutReceipts?.[receiptKey];if(old){if(old.payload!==JSON.stringify({route,b}))throw Error('Save ID belongs to a different workout.');const prior=state.logs.find(l=>l.id===old.id);if(!prior)throw Error('Workout was deleted; start a new workout to redo it.');return clone(prior);}}
@@ -54,7 +57,8 @@ export function createLocalDemo(storage){
     else if(['login','redeem','invite'].includes(route))throw Error('Live sign-in and invitations require the hosted version. This preview saves only on this phone.');
     else{
       if(!user)throw Error('Choose Coach view or Athlete view.');
-      if(route==='data')result={user,demo:true,standalone:true,exercises:state.exercises,programs:user.role==='coach'?state.programs:[],discover:user.role==='athlete'?state.programs.filter(p=>discoverable(p,user.id)).map(({discover,...p})=>p):[],athletes:user.role==='coach'?state.athletes:[],assignments:state.assignments.filter(a=>user.role==='coach'||a.athleteId===user.id),logs:state.logs.filter(l=>user.role==='coach'||l.athleteId===user.id)};
+      if(route==='data')result={user,demo:true,standalone:true,exercises:state.exercises,programs:user.role==='coach'?state.programs:[],discover:user.role==='athlete'?state.programs.filter(p=>discoverable(p,user.id)).map(({discover,...p})=>p):[],athletes:user.role==='coach'?state.athletes:[],assignments:state.assignments.filter(a=>user.role==='coach'||a.athleteId===user.id),strengthGoals:state.strengthGoals.filter(g=>user.role==='coach'||g.athleteId===user.id),logs:state.logs.filter(l=>user.role==='coach'||l.athleteId===user.id)};
+      else if(route==='strength-goal'&&method==='POST'){const athleteId=b.athleteId||user.id;if(user.role!=='coach'&&athleteId!==user.id)throw Error('Access denied.');if(!state.athletes.some(a=>a.id===athleteId))throw Error('Athlete not found.');result=save('strengthGoals',prepareStrengthGoal(b,state.exercises,athleteId));}
       else if(['enrollment-preview','enroll'].includes(route)&&method==='POST'){
         if(user.role!=='athlete')throw Error('Athlete access required.');let a;if(b.assignmentId)a=owned(b.assignmentId);else{const p=state.programs.find(p=>p.id===b.programId);if(!p||!discoverable(p,user.id))throw Error('Program unavailable.');if(route==='enroll'&&state.assignments.some(x=>x.athleteId===user.id&&x.programId===p.id))throw Error('This program is already in My Programs.');a={...assignment(p,user.id,b.startDate),description:p.description,modality:p.modality,level:p.level,enrollment:{source:'discover',status:'pending'}};}result=route==='enrollment-preview'?proposeSchedule(a,b):save('assignments',confirmSchedule(a,b,state.logs));
       }
@@ -107,7 +111,7 @@ export function createLocalDemo(storage){
           const collection={program:'programs',exercise:'exercises',assignment:'assignments',log:'logs'}[b.kind];
           const record=collection&&state[collection].find(x=>x.id===b.id);if(!record)throw Error('Record not found.');
           if(b.kind==='log'){if(user.role!=='coach'&&record.athleteId!==user.id)throw Error('Access denied.');}else coach();
-          if(b.kind==='exercise'&&[...state.programs,...state.assignments,...state.logs].some(r=>referencesExercise(r,b.id)))throw Error('This exercise is still used in a program or workout history.');
+          if(b.kind==='exercise'&&[...state.programs,...state.assignments,...state.logs,...state.strengthGoals].map(r=>r.exerciseId?{exercises:[r]}:r).some(r=>referencesExercise(r,b.id)))throw Error('This exercise is still used in a program or workout history.');
           state[collection]=state[collection].filter(x=>x.id!==b.id);
         }
       }else if(route==='account'&&method==='DELETE'){

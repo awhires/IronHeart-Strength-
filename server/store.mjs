@@ -6,7 +6,7 @@ import { dirname } from 'node:path';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { exercises, programs } from './seed.mjs';
 import { migrateToPounds } from './units.mjs';
-import {LIBRARY_UPDATE,missingLibraryExercises} from '../shared/exercise-library.mjs';
+import {LIBRARY_UPDATE,missingLibraryExercises,missingStrengthProgressExercises} from '../shared/exercise-library.mjs';
 export function hashPassword(password) { const salt = randomBytes(16).toString('hex'); return salt + ':' + scryptSync(password,salt,64).toString('hex'); }
 export function verifyPassword(password, hash) { const [salt,value] = hash.split(':'); const actual = scryptSync(password,salt,64); return timingSafeEqual(actual,Buffer.from(value,'hex')); }
 export function openStore(path, demo=false) {
@@ -45,6 +45,7 @@ export function openStore(path, demo=false) {
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('tracking-library-v1')){db.exec('BEGIN');try{missingTrackingExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('tracking-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('conditioning-library-v1')){db.exec('BEGIN');try{missingConditioningExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('conditioning-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('single-unders-v1')){db.exec('BEGIN');try{missingSingleUnders(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('single-unders-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
+  if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('strength-progress-library-v1')){db.exec('BEGIN');try{missingStrengthProgressExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('strength-progress-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   migrateToPounds(db);
   return { db,all,get,put,addUser };
 }

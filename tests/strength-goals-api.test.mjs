@@ -1,0 +1,23 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {spawn} from 'node:child_process';import {mkdtemp,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {once} from 'node:events';
+test('hosted goals enforce ownership, persist across restart and preserve history',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-goals-'));let child;
+ const stop=async()=>{if(child?.exitCode===null){const done=once(child,'exit');child.kill();await done;}};
+ const start=async()=>{child=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:'4213',HOST:'127.0.0.1',DEMO_MODE:'true',DB_PATH:join(dir,'test.sqlite'),AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);};
+ t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});await start();
+ const req=async(path,method='GET',body,token)=>{const r=await fetch('http://127.0.0.1:4213/api/'+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
+ const coach=(await req('demo','POST',{role:'coach',native:true})).data.token,athlete=(await req('demo','POST',{role:'athlete',native:true})).data.token;
+ const before=(await req('data','GET',null,athlete)).data,exerciseId='bench',b={exerciseId,repMax:1,targetLb:225,athleteId:'jordan'};
+ assert.equal((await req('strength-goal','POST',b)).status,401);
+ assert.equal((await req('strength-goal','POST',{...b,athleteId:'maya'},athlete)).status,403);
+ assert.equal((await req('strength-goal','POST',{...b,targetLb:-1},athlete)).status,400);
+ assert.equal((await req('strength-goal','POST',{...b,athleteId:'missing'},coach)).status,404);
+ assert.equal((await req('strength-goal','POST',b,athlete)).status,200);
+ assert.equal((await req('strength-goal','POST',{...b,targetLb:230},coach)).status,200);
+ await req('strength-goal','POST',{...b,athleteId:'maya'},coach);
+ assert.equal((await req('data','GET',null,athlete)).data.strengthGoals.length,1);
+ assert.equal((await req('data','GET',null,coach)).data.strengthGoals.length,2);
+ await stop();await start();const after=(await req('data','GET',null,athlete)).data;
+ assert.equal(after.strengthGoals[0].targetLb,230);assert.deepEqual(after.logs,before.logs);assert.deepEqual(after.assignments,before.assignments);assert.equal(after.exercises.filter(e=>e.name==='Zercher Squat').length,1);
+ assert.equal((await req('delete','POST',{kind:'exercise',id:exerciseId},coach)).status,409);
+ await req('account','DELETE',{},athlete);assert.equal((await req('data','GET',null,coach)).data.strengthGoals.some(g=>g.athleteId==='jordan'),false);
+});
