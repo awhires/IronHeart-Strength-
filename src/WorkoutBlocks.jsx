@@ -1,3 +1,4 @@
+import CoachScanReview from './CoachScanReview.jsx';
 import React,{useState} from 'react';
 
 import PrescriptionEditor from './PrescriptionEditor.jsx';
@@ -50,7 +51,7 @@ export function MetconScoreEditor({metcon,score,onChange,exercises}){
 
 }
 
-export default function SessionBlocksEditor({session,onChange,exercises}){
+export default function SessionBlocksEditor({session,onChange,exercises,request}){
 
  const [nextType,setNextType]=useState('Strength');
 
@@ -64,6 +65,6 @@ export default function SessionBlocksEditor({session,onChange,exercises}){
 
  function remove(index){const all=[],next=blocks.filter((_,i)=>i!==index).map(b=>{if(b.type==='Metcon')return b;const start=all.length;all.push(...b.exerciseIndexes.map(n=>session.exercises[n]));return {...b,exerciseIndexes:b.exerciseIndexes.map((_,n)=>start+n)};});onChange({...session,exercises:all,blocks:next});}
 
- return <><div className="workout-blocks">{blocks.map((b,i)=><section className="set-block" key={b.id}><div className="row spread"><h3>Block {i+1} · {b.type}</h3>{blocks.length>1&&<button type="button" className="btn secondary" onClick={()=>remove(i)}>Delete block</button>}</div>{b.type==='Metcon'?<MetconEditor value={b.metcon} exercises={exercises} onChange={metcon=>updateBlock(i,[],{metcon})}/>:<><label className="field"><span>Block type</span><select value={b.type} onChange={e=>updateBlock(i,b.exerciseIndexes.map(n=>session.exercises[n]),{type:e.target.value})}>{BLOCK_TYPES.filter(t=>t!=='Metcon').map(t=><option key={t}>{t}</option>)}</select></label><PrescriptionEditor items={b.exerciseIndexes.map(n=>session.exercises[n])} exercises={exercises} onChange={items=>updateBlock(i,items)}/></>}</section>)}</div><div className="row"><label className="field"><span>New block type</span><select aria-label="New block type" value={nextType} onChange={e=>setNextType(e.target.value)}>{BLOCK_TYPES.map(t=><option key={t}>{t}</option>)}</select></label><button type="button" className="btn secondary" onClick={()=>onChange({...session,blocks:[...blocks,{id:crypto.randomUUID(),type:nextType,...(nextType==='Metcon'?{metcon:newMetcon()}:{exerciseIndexes:[]})}]})}>+ Add workout block</button></div></>;
+ return <>{request&&<CoachScanReview request={request} exercises={exercises} onAdd={items=>onChange({...session,exercises:[...session.exercises,...items],blocks:[...blocks,{id:crypto.randomUUID(),type:'Strength',exerciseIndexes:items.map((_,i)=>session.exercises.length+i)}]})}/>}<div className="workout-blocks">{blocks.map((b,i)=><section className="set-block" key={b.id}><div className="row spread"><h3>Block {i+1} · {b.type}</h3>{blocks.length>1&&<button type="button" className="btn secondary" onClick={()=>remove(i)}>Delete block</button>}</div>{b.type==='Metcon'?<MetconEditor value={b.metcon} exercises={exercises} onChange={metcon=>updateBlock(i,[],{metcon})}/>:<><label className="field"><span>Block type</span><select value={b.type} onChange={e=>updateBlock(i,b.exerciseIndexes.map(n=>session.exercises[n]),{type:e.target.value})}>{BLOCK_TYPES.filter(t=>t!=='Metcon').map(t=><option key={t}>{t}</option>)}</select></label><PrescriptionEditor items={b.exerciseIndexes.map(n=>session.exercises[n])} exercises={exercises} onChange={items=>updateBlock(i,items)}/></>}</section>)}</div><div className="row"><label className="field"><span>New block type</span><select aria-label="New block type" value={nextType} onChange={e=>setNextType(e.target.value)}>{BLOCK_TYPES.map(t=><option key={t}>{t}</option>)}</select></label><button type="button" className="btn secondary" onClick={()=>onChange({...session,blocks:[...blocks,{id:crypto.randomUUID(),type:nextType,...(nextType==='Metcon'?{metcon:newMetcon()}:{exerciseIndexes:[]})}]})}>+ Add workout block</button></div></>;
 
 }

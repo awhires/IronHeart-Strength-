@@ -30,7 +30,7 @@ export function expandBlocks(blocks){
  return blocks.flatMap(({count,...set},blockIndex)=>Array.from({length:count},()=>({...structuredClone(set),blockIndex})));
 }
 export function complexLabel(parts,library){return parts.map(p=>`${p.reps} ${p.modifier?p.modifier+' ':''}${library.find(e=>e.id===p.exerciseId)?.name||p.exerciseName||'Unmatched movement'}`).join(' + ');}
-const aliases={BP:'bench',PC:'power-clean',BS:'squat',FS:'front-squat',OHS:'overhead-squat',RDL:'rdl'};
+const aliases={'BENCH PRESS':'bench',BP:'bench',PC:'power-clean',BS:'squat',FS:'front-squat',OHS:'overhead-squat',RDL:'rdl'};
 export function matchExercise(name,library){const exact=library.filter(e=>normalize(e.name)===normalize(name));if(exact.length===1)return exact[0];if(exact.length>1)return null;return library.find(e=>e.id===aliases[String(name).trim().toUpperCase()])||null;}
 export function setSummary(s,type='strength'){
  const parts=[];if(s.reps!=null)parts.push(`${s.reps} reps`);if(s.load!=null)parts.push(`${s.load} ${s.loadUnit==='kg'?'kg':'lb'}`);

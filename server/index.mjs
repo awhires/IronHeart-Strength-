@@ -96,7 +96,7 @@ const server=http.createServer(async(req,res)=>{
       }
       else if(route==='/api/move-workout'&&req.method==='POST'){const a=owned(b.id);result=put('assignment',checked(()=>moveWorkout(a,b,all('log'))),a.athleteId);}
       else if(route==='/api/programs'&&req.method==='POST'){coach();const prepared=checked(()=>prepareProgram(b,all('exercise')));const id=b.id||randomUUID();if(b.id&&!get('program',b.id))fail(404,'Template not found.');result=put('program',{...prepared,id});}
-      else if(route==='/api/ai/workout-scan'&&req.method==='POST'){if(u.role!=='athlete')fail(403,'Athlete access required.');limit(req);result=await scanner.scan(b,{userId:u.id,library:all('exercise')});}
+      else if(route==='/api/ai/workout-scan'&&req.method==='POST'){limit(req);result=await scanner.scan(b,{userId:u.id,library:all('exercise')});}
       else if(route==='/api/ai/status'&&req.method==='GET'){coach();result=generation.status();}
       else if(route==='/api/ai/program-draft'&&req.method==='POST'){
         coach();const library=all('exercise');const input=validateGenerationInput(b,library);

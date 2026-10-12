@@ -10,7 +10,7 @@ import {createFixture,FIXTURE_REQUIREMENTS} from '../shared/ai/fixtures.mjs';
 import './ai-review.css';
 
 const LOAD_LABELS={[LOAD_MODE.FIXED]:'Fixed weight',[LOAD_MODE.PERCENTAGE]:'Percentage of 1RM',[LOAD_MODE.BODYWEIGHT]:'Bodyweight',[LOAD_MODE.ATHLETE_SELECTED]:'Athlete selects weight'};
-const EFFORT_LABELS={[EFFORT_MODE.NONE]:'Standard sets / reps',[EFFORT_MODE.RPE]:'RPE target',[EFFORT_MODE.RIR]:'RIR target'};
+const EFFORT_LABELS={[EFFORT_MODE.NONE]:'Standard sets / reps',[EFFORT_MODE.RPE]:'RPE target',[EFFORT_MODE.RIR]:'Historical effort (preserved)'};
 const STATUS_LABELS={[DRAFT_STATUS.DRAFT]:'Draft',[DRAFT_STATUS.NEEDS_REVIEW]:'Needs review',[DRAFT_STATUS.APPROVED]:'Approved revision'};
 const lines=s=>s===''?[]:s.split('\n');
 
@@ -86,9 +86,8 @@ export default function AIDraftReview({exercises,coachId,request,onSaved,initial
           {field(`${prefix} load`,`${ep}/load`,<NumberInput value={e.load} min="0" max="1200" step="any" placeholder="Not prescribed" onChange={v=>exercise(si,ei,'load',v)}/>)}
           {field(`${prefix} weight unit`,`${ep}/loadUnit`,<select value={e.loadUnit} onChange={ev=>exercise(si,ei,'loadUnit',ev.target.value)}>{Object.values(LOAD_UNIT).map(unit=><option key={unit}>{unit}</option>)}</select>)}
           {field(`${prefix} percent of 1RM`,`${ep}/percent1RM`,<NumberInput value={e.percent1RM} min="1" max="100" step="any" placeholder="No percentage" onChange={v=>exercise(si,ei,'percent1RM',v)}/>)}
-          {field(`${prefix} effort mode`,`${ep}/effortMode`,<select value={e.effortMode} onChange={ev=>exercise(si,ei,'effortMode',ev.target.value)}>{Object.values(EFFORT_MODE).map(mode=><option key={mode} value={mode}>{EFFORT_LABELS[mode]}</option>)}</select>)}
+          {field(`${prefix} effort mode`,`${ep}/effortMode`,<select value={e.effortMode} onChange={ev=>exercise(si,ei,'effortMode',ev.target.value)}>{Object.values(EFFORT_MODE).filter(mode=>mode!==EFFORT_MODE.RIR||e.effortMode===EFFORT_MODE.RIR).map(mode=><option key={mode} value={mode}>{EFFORT_LABELS[mode]}</option>)}</select>)}
           {field(`${prefix} RPE`,`${ep}/rpe`,<NumberInput value={e.rpe} min="1" max="10" step="0.5" placeholder="No RPE target" onChange={v=>exercise(si,ei,'rpe',v)}/>)}
-          {field(`${prefix} RIR`,`${ep}/rir`,<NumberInput value={e.rir} min="0" max="10" step="0.5" placeholder="No RIR target" onChange={v=>exercise(si,ei,'rir',v)}/>)}
           {field(`${prefix} rest (seconds)`,`${ep}/rest`,<NumberInput value={e.rest} min="0" max="600" step="5" onChange={v=>exercise(si,ei,'rest',v)}/>)}
           {field(`${prefix} tempo`,`${ep}/tempo`,<input value={e.tempo??''} placeholder="Optional · 3-1-X-0" title={TEMPO_DESCRIPTION} onChange={ev=>exercise(si,ei,'tempo',ev.target.value===''?null:ev.target.value)}/>)}
           {field(`${prefix} weight increment`,`${ep}/increment`,<NumberInput value={e.increment} min="0.25" max="25" step="0.25" onChange={v=>exercise(si,ei,'increment',v)}/>)}

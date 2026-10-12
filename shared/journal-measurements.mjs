@@ -1,3 +1,4 @@
+import {intervalSegments,validateIntervalShape} from './cardio-structure.mjs';
 import {calculatedCardioMetrics,validateCardioPrescription} from './cardio-prescriptions.mjs';
 import {trackingProfile,FIELDS,expandBlocks,MODIFIERS,complexLabel,DISTANCE_METERS,CARDIO_TYPES} from './tracking.mjs';
 import {inPounds} from './ai/contract.mjs';
@@ -7,7 +8,7 @@ export function prepareJournalEntry(entry,exercise,library){
  const trackingType=trackingProfile(exercise),strength=trackingType==='strength';
  if(entry.blocks&&entry.sets)throw Error('Use either set blocks or individual sets.');
  const raw=entry.blocks?expandBlocks(entry.blocks):entry.sets;
- if(!Array.isArray(raw)||!raw.length||raw.length>30)throw Error('Log 1–30 sets per exercise.');
+ if(!Array.isArray(raw)||!raw.length||raw.length>(CARDIO_TYPES.includes(trackingType)?300:30))throw Error(CARDIO_TYPES.includes(trackingType)?'Log 1–300 cardio segments.':'Log 1–30 sets per exercise.');
  const complex=entry.complex??[];
  if(!Array.isArray(complex)||complex.length>10||(!strength&&complex.length))throw Error('Use up to 10 movements in a strength complex.');
  const parts=complex.map(p=>{
@@ -40,15 +41,18 @@ export function prepareJournalEntry(entry,exercise,library){
  });
  const intervals=entry.intervals??[];
  if(!Array.isArray(intervals)||intervals.length>20||(!CARDIO_TYPES.includes(trackingType)&&intervals.length))throw Error('Intervals are for cardio; use at most 20 blocks.');
+ if(intervals.some(b=>b.segments)&&intervals.reduce((n,b)=>n+b.rounds*intervalSegments(b).length,0)>300)throw Error('Use at most 300 performed cardio segments.');
  const cleanIntervals=intervals.map(b=>{
+  if(b.segments)validateIntervalShape([b]);
   if(!Number.isInteger(b.rounds)||b.rounds<1||b.rounds>100)throw Error('Use 1–100 interval rounds.');
   const phase=(p,recovery=false)=>{
    if(recovery&&p&&Object.values(p).every(v=>v==null||v===0||typeof v==='string'))return {};
    if(!p||!(p.durationSeconds>0||p.distance>0))throw Error('Each interval work/recovery phase needs time or distance.');
-   const result={};for(const k of FIELDS[trackingType])if(p[k]!=null){if(!optional(p[k],0,k==='durationSeconds'||k==='paceSeconds'?86400:1000))throw Error('Check interval metrics.');result[k]=p[k];}
-   if(p.distance!=null||p.paceSeconds!=null){if(!DISTANCE_METERS[p.distanceUnit])throw Error('Check interval distance unit.');result.distanceUnit=p.distanceUnit;}
+   const result={};for(const k of [...FIELDS[trackingType],'rpe'])if(p[k]!=null){if(!optional(p[k],0,k==='rpe'?10:k==='distance'?1000000:k==='durationSeconds'||k==='paceSeconds'?86400:10000))throw Error('Check interval metrics.');result[k]=p[k];}
+   if(p.distance!=null||p.paceSeconds!=null){p={...p,distanceUnit:p.distanceUnit||(['erg','swimming'].includes(trackingType)?'m':'mi')};if(!DISTANCE_METERS[p.distanceUnit])throw Error('Check interval distance unit.');result.distanceUnit=p.distanceUnit;}
+   if(p.paceUnit!=null){if(trackingType!=='running'||!['mi','km'].includes(p.paceUnit))throw Error('Check interval pace unit.');result.paceUnit=p.paceUnit;}
    return result;
-  };return {rounds:b.rounds,work:phase(b.work),recovery:phase(b.recovery,true)};
+  };return {rounds:b.rounds,...(b.segments?{segments:b.segments.map(s=>({label:s.label||'',metrics:phase(s.metrics)}))}:{work:phase(b.work)}),recovery:phase(b.recovery,true)};
  });
  if(typeof(entry.notes??'')!=='string'||(entry.notes||'').length>2000)throw Error('Exercise notes must be shorter than 2000 characters.');
  return {exerciseId:exercise.id,exerciseName:exercise.name,sets,

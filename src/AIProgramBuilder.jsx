@@ -3,7 +3,7 @@ import {Sparkles,LoaderCircle} from 'lucide-react';
 import {PROGRAM_LENGTHS} from '../shared/ai/contract.mjs';
 import {MODALITIES,MODALITY_NAMES} from '../shared/program-schedule.mjs';
 import {OPTION_FIELDS} from '../shared/ai/programming-options.mjs';
-const example='Create a 6-week strength block for an intermediate athlete. Train 4 days per week. Bench twice per week, squat twice per week, and deadlift once per week. Main lifts should use RPE. Accessories should generally use RIR. Keep sessions around 75 minutes.';
+const example='Create a 6-week strength block for an intermediate athlete. Train 4 days per week. Bench twice per week, squat twice per week, and deadlift once per week. Main lifts should use RPE. Accessories should use standard sets and reps. Keep sessions around 75 minutes.';
 export default function AIProgramBuilder({request,athletes,exercises,onGenerated,seed,full}){
   const [prompt,setPrompt]=useState(''),[athleteId,setAthleteId]=useState(''),[requirements,setRequirements]=useState({}),[status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const alive=useRef(true);

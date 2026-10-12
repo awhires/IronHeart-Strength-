@@ -45,6 +45,8 @@ export function createGenerationService({config=generationConfig(),provider,prod
         let output;try{output=await adapter.generateProgramDraft(value.request,context);}catch(e){if(e instanceof GenerationError)throw e;throw new GenerationError('PROVIDER_UNAVAILABLE','AI generation failed. Try again later.');}
         if(!object(output)||Buffer.byteLength(JSON.stringify(output))>80000)throw new GenerationError('INVALID_OUTPUT','AI returned an invalid or oversized draft. Request a smaller block.');
         if(validateDraftStructure(output).length)throw new GenerationError('CONTRACT_MISMATCH','AI returned a draft that does not match the workout contract. Try again with a clearer or smaller request.');
+        const hasRir=v=>v&&typeof v==='object'&&(v.effortMode==='rir'||v.rir!=null||Object.values(v).some(x=>x&&typeof x==='object'&&hasRir(x)));
+        if(hasRir(output))throw new GenerationError('UNSUPPORTED_EFFORT','New AI prescriptions must use RPE or standard sets/reps.');
         // Provider status, claimed validation, linkage, and rewritten prompt cannot grant authority.
         const draft={...structuredClone(output),status:DRAFT_STATUS.DRAFT,athleteId:value.athleteId,sourceProgramId:null,originalRequest:value.request,validationFindings:[]};
         const validation=validateDraft(draft,library,value.requirements);

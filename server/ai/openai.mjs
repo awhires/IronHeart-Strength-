@@ -10,6 +10,8 @@ export function providerSchema(value=AI_DRAFT_SCHEMA_V2){
   for(const [key,item] of Object.entries(value)){
     if(['$schema','title','minLength','maxLength','exclusiveMinimum'].includes(key))continue;
     if(key==='const'){out.type=typeof item==='number'?'integer':'string';out.enum=[item];continue;}
+    if(key==='effortMode'){out[key]={type:'string',enum:['none','rpe']};continue;}
+    if(key==='rir'){out[key]={type:'null'};continue;}
     out[key]=providerSchema(item);
   }
   if(out.type==='object'){out.additionalProperties=false;out.required=Object.keys(out.properties);}
@@ -24,8 +26,8 @@ Use complete sequential weeks with sessions and prescriptions. Valid block lengt
 If program length is missing, use weeks:null, include one provisional week and ask how many weeks are wanted. Do not silently assume a material constraint. Record other reasonable assumptions in assumptions. Questions must remain explicit.
 For cardio/endurance exercises use trackingType from the library, intervalCount, restSeconds and metrics. For 6 x 250m RowErg at 1:42/500m, use trackingType:erg, intervalCount:6, metrics.distance:250, distanceUnit:m, paceSeconds:102, restSeconds:90. Never put cardio distance into reps or use strength loadMode for cardio. Outdoor running pace must be min/mi or min/km, never seconds per meter. Use paceUnit mi or km separately from distanceUnit. Numeric durations and paces are seconds; the app displays M:SS. Leave irrelevant metric properties null. Require distance or duration.
 Sessions use blocks:[] when no mixed blocks are necessary. For Metcons use a block with type:Metcon, unique id, name, and metcon containing scoreType, repScheme, movements, optional rounds/duration/time cap/work/rest seconds and notes. Use exerciseIndexes for other block types, with each normal exercise referenced exactly once. Metcon-only sessions may have exercises:[]. Preserve multiple movements and scoring structure; never flatten a Metcon into strength rows.
-Use fixed, percentage, bodyweight or athlete_selected load modes, and none, rpe or rir effort modes. Unknown fixed loads remain null with athlete_selected loading; null never means zero or bodyweight. Choose lbs unless requested otherwise.
-Use only the selected effort target; other targets stay null. Accessories may use RIR or standard sets/reps when requested. No effort target means effortMode:none and null rpe/rir.
+Use fixed, percentage, bodyweight or athlete_selected load modes, and none or rpe effort modes. Unknown fixed loads remain null with athlete_selected loading; null never means zero or bodyweight. Choose lbs unless requested otherwise.
+Use only the selected effort target; other targets stay null. Do not prescribe RIR. Always leave rir:null; accessories may use RPE or standard sets/reps. No effort target means effortMode:none and null rpe/rir.
 Never invent athlete history, injury information, testing dates or a 1RM. No tested maxima are provided in this v1 context. Use reference1RM:null unless the coach explicitly supplies a full matching reference value/unit/source/date; if percentage loading lacks a reference, preserve percent1RM with load:null, reference1RM:null and ask for it.
 Percentage remains canonical. Leave its load:null; Iron Heart calculates suggestions. For bodyweight or athlete-selected load leave load:null. Use rounding increment 5 lbs (or 2.5 kg) unless another increment is specified.
 Tempo is optional: eccentric-bottom pause-concentric-top pause, e.g. 3-1-X-0; X only means explosive concentric. Rest is seconds. Sets/reps are integers. Sessions are limited to 15 exercises and 7 sessions per week; sets 1-12, reps 1-50.

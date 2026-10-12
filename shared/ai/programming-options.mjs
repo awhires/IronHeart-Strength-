@@ -2,8 +2,8 @@ import {MODALITIES} from '../program-schedule.mjs';
 // Versioned Iron Heart guidance slots. Future rule packs can extend this registry.
 export const PROGRAMMING_RULES_VERSION=1;
 export const OPTION_FIELDS={
- strength:[['experience','Experience level'],['primaryLifts','Primary lifts'],['setsReps','Sets / reps preferences'],['effort','%1RM / RPE / RIR'],['progression','Progression preference'],['accessories','Accessories'],['deload','Deload preference']],
- hypertrophy:[['split','Training split'],['emphasis','Muscle-group emphasis'],['frequency','Muscle frequency'],['volume','Weekly volume / minimum effective dose'],['repRange','Rep ranges'],['effort','RIR / RPE'],['progression','Progression style'],['deload','Deload preference'],['equipment','Available equipment']],
+ strength:[['experience','Experience level'],['primaryLifts','Primary lifts'],['setsReps','Sets / reps preferences'],['effort','%1RM / RPE'],['progression','Progression preference'],['accessories','Accessories'],['deload','Deload preference']],
+ hypertrophy:[['split','Training split'],['emphasis','Muscle-group emphasis'],['frequency','Muscle frequency'],['volume','Weekly volume / minimum effective dose'],['repRange','Rep ranges'],['effort','RPE / standard sets'],['progression','Progression style'],['deload','Deload preference'],['equipment','Available equipment']],
  running:[['event','Goal / event (Couch-to-5K, 5K, marathon…)'],['ability','Current ability / weekly mileage'],['recentPerformance','Recent race / time trial (distance + time + date)'],['easy','Easy / aerobic work'],['threshold','Threshold work'],['intervals','VO2 / intervals'],['speed','Speed / repetitions'],['longRun','Long run']],
  metcon:[['scoreType','Scoring (For Time, AMRAP, EMOM…)'],['workRest','Duration / work-rest'],['movements','Movement selection'],['equipment','Equipment'],['stimulus','Intended stimulus']],
  hybrid:[['combination','Modalities and days (e.g. strength 4 + running 2)'],['priorities','Goals for each modality'],['recentPerformance','Recent race / time trial if running'],['equipment','Equipment'],['interaction','Explicit changes between modalities (optional)']]

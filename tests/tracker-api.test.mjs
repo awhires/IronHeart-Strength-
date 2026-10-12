@@ -39,4 +39,16 @@ test('live tracker persists journal history with authenticated ownership and lea
   const history=(await request('data','GET',null,athlete)).data.logs;assert.equal(history.filter(l=>l.source==='tracker').length,2);assert.equal(history.filter(l=>l.assignmentId===assignment.id).length,1);
   assert.equal((await request('delete','POST',{kind:'log',id:saved.data.id},athlete)).status,200);
   assert.equal((await request('tracker','POST',input,athlete)).status,410);
+  await t.test('coach and athlete share authenticated scan access without gaining save permissions',async()=>{
+    assert.equal((await request('ai/workout-scan','POST',{})).status,401);
+    for(const token of [coach,athlete])assert.equal((await request('ai/workout-scan','POST',{},token)).status,503);
+    assert.equal((await request('tracker','POST',input,coach)).status,403);
+  });
+  await t.test('nested cardio and grouped strength save, deduplicate and reload without losing targets',async()=>{
+    const target={exerciseId:'rowerg',trackingType:'erg',intervalCount:10,metrics:{durationSeconds:40,paceSeconds:120},restSeconds:0,intervals:[{rounds:5,segments:[{label:'Easy',metrics:{durationSeconds:40,paceSeconds:120}},{label:'Hard/Max',metrics:{durationSeconds:20,paceSeconds:85}}],recovery:{durationSeconds:120}}]};
+    const nested={sessionName:'Repeated intervals and grouped bench',clientRequestId:crypto.randomUUID(),exercises:[{exerciseId:'bench',blocks:[{count:3,reps:10,load:100},{count:2,reps:8,load:110},{count:1,reps:6,load:120}]},{exerciseId:'rowerg',target,sets:Array.from({length:10},(_,i)=>({durationSeconds:i%2?21:42,paceSeconds:i%2?87:123,completed:true}))}]};
+    const result=await request('tracker','POST',nested,athlete);assert.equal(result.status,200);assert.equal(result.data.exercises[0].sets.length,6);assert.deepEqual(result.data.exercises[1].target,target);assert.equal(result.data.exercises[1].sets[1].paceSeconds,87);
+    assert.equal((await request('tracker','POST',nested,athlete)).data.id,result.data.id);
+    const reloaded=(await request('data','GET',null,athlete)).data.logs.filter(l=>l.id===result.data.id);assert.equal(reloaded.length,1);assert.deepEqual(reloaded[0].exercises,result.data.exercises);
+  });
 });
