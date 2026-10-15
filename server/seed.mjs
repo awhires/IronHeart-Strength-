@@ -9,10 +9,10 @@ export const exercises = [
   ['pullup','Pull-up','Upper body','Bodyweight','Pull','Start with control, pull your chest toward the bar, and lower fully.','eGo4IYlbE5g'],
   ['lunge','Dumbbell Walking Lunge','Lower body','Dumbbell','Lunge','Step into a stable stance. Keep your front knee aligned with your foot.','L8fvypPrzzs'],
   ['goblet','Goblet Squat','Lower body','Dumbbell','Squat','Hold the weight close to your chest and sit between your hips.','MeIiIdhvXT4'],
-  ['plank','Forearm Plank','Core','Bodyweight','Brace','Brace your midsection and breathe. Each rep is one controlled breath.','ASdvN_XEl_c'],
+  ['plank','Forearm Plank','Core','Bodyweight','Brace','Brace and breathe steadily during the hold. Record duration in seconds. Older breath-count prescriptions need a coach-selected duration; do not treat breaths as seconds.','ASdvN_XEl_c'],
   ['incline','Incline Dumbbell Press','Upper body','Dumbbell','Push','Keep your shoulders set and lower both dumbbells with control.','8iPEnn-ltC8'],
   ['bridge','Glute Bridge','Lower body','Bodyweight','Hinge','Drive through your heels and extend the hips without arching the back.','wPM8icPu6H8']
-].map(([id,name,region,equipment,pattern,cues,video]) => ({id,name,region,equipment,pattern,cues,video})).concat(additionalExercises);
+].map(([id,name,region,equipment,pattern,cues,video]) => ({id,name,region,equipment,pattern,cues,video,...(id==='plank'?{trackingType:'timed'}:{})})).concat(additionalExercises);
 const item = (exerciseId, sets, reps, load, rest=120) => ({exerciseId,sets,reps,load,rest,rpe:7,increment:2.5,notes:''});
 export const programs = [
   {id:'strength-foundations', name:'Strength Foundations', goal:'Build strength', weeks:8, description:'A balanced three-day block built around the fundamental movement patterns.', sessions:[

@@ -1,6 +1,12 @@
+import {trackingProfile} from '../shared/tracking.mjs';
 import {normalizePrescription} from '../shared/prescriptions.mjs';
 import {LOAD_MODE, EFFORT_MODE, LOAD_UNIT} from '../shared/ai/contract.mjs';
-export function supportsLoadProgression(item){const e=normalizePrescription(item);return !e.trackingType&&!e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
+export function supportsLoadProgression(item){const e=normalizePrescription(item);return trackingProfile({id:e.exerciseId,name:e.exerciseName,trackingType:e.trackingType})==='strength'&&!e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
+export function supportsCoachProgression(item){
+ if(!item.setBlocks?.length)return supportsLoadProgression(item);
+ return item.setBlocks.every(b=>supportsLoadProgression({...item,...b,setBlocks:undefined}));
+}
+export function progressionExplanation(item){return supportsCoachProgression(item)?(item.setBlocks?.length?'Weekly increases apply to each grouped row. Dynamic effort waves require a single prescription.':''): 'Keep this target: automatic load changes require a strength exercise with fixed pounds and RPE in every row. Percentage, athlete-selected, timed and cardio targets remain coach-directed.';}
 // Generate a complete, reviewable block from a coach-authored first week.
 export function generateBlock(sessions, weeks, options = {}) {
   if(options.method==='westside')return generateWestsideBlock(sessions,weeks,options);
@@ -31,8 +37,9 @@ export function generateWestsideBlock(sessions,weeks,options={}) {
   const allowed=['hold','max','repetition','speed-squat','speed-bench'];
   for(const [si,s] of sessions.entries())for(const [ei,e] of s.exercises.entries()){
     const mode=rules[`${si}:${ei}:${e.exerciseId}`]?.mode||'hold';
-    if(mode!=='hold'&&!supportsLoadProgression(e))throw new Error('Automatic load progression supports fixed pounds with RPE. Keep this prescription and edit its weeks manually.');
-    if(e.trackingType&&e.trackingType!=='strength')continue;
+    if(mode!=='hold'&&!supportsCoachProgression(e))throw new Error('Automatic load progression supports fixed pounds with RPE. Keep this prescription and edit its weeks manually.');
+    if(mode.startsWith('speed-')&&e.setBlocks?.length)throw new Error('Dynamic effort waves require a single prescription; keep grouped rows or choose repetition effort.');
+    if(trackingProfile({id:e.exerciseId,name:e.exerciseName,trackingType:e.trackingType})!=='strength')continue;
     if(!Number.isInteger(e.sets)||e.sets<1||e.sets>12||(supportsLoadProgression(e)&&(e.load<0||e.load>1200)))throw new Error('Check Week 1 weights and sets before generating.');
   }
   for(const rule of Object.values(rules)){
@@ -48,7 +55,7 @@ export function generateWestsideBlock(sessions,weeks,options={}) {
     const round=load=>Math.min(1200,Math.round(load/step)*step);
     if(rule.mode==='speed-squat'||rule.mode==='speed-bench')return {...e,load:round(rule.referenceMax*(rule.mode==='speed-bench'?[.45,.5,.55]:[.5,.55,.6])[wave]),sets:rule.mode==='speed-squat'?[10,8,6][wave]:9,reps:rule.mode==='speed-squat'?2:3,increment:step,phase:`Dynamic effort · Wave ${Math.floor(i/3)+1}`,notes:[e.notes,'Bar weight only; no bands/chains included. Prioritize speed and technique. Review variation after each 3-week wave.'].filter(Boolean).join('\n')};
     if(rule.mode==='max')return {...e,phase:'Max effort · coach set',notes:[e.notes,'Coach: review or rotate the main variation weekly and choose the day’s load. No automatic maximal-load increases.'].filter(Boolean).join('\n')};
-    if(rule.mode==='repetition')return {...e,load:e.load===0?0:round(e.load*(1+(rule.increase||0)/100)**i),phase:'Repetition effort',notes:[e.notes,'Coach-selected accessory progression; adjust for completed reps and recovery.'].filter(Boolean).join('\n')};
+    if(rule.mode==='repetition')return {...e,load:round((e.setBlocks?.[0]?.load??e.load)*(1+(rule.increase||0)/100)**i),...(e.setBlocks?.length?{setBlocks:e.setBlocks.map(b=>({...structuredClone(b),load:round((b.load??e.load)*(1+(rule.increase||0)/100)**i)}))}:{}),phase:'Repetition effort',notes:[e.notes,'Coach-selected accessory progression; adjust for completed reps and recovery.'].filter(Boolean).join('\n')};
     return {...e,phase:'Coach programmed'};
   })}))}));
 }

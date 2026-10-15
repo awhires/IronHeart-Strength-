@@ -231,3 +231,27 @@ input:focus,select:focus,textarea:focus{
     backdrop-filter:none;
   }
 }
+/* Compact athlete agenda; coach scheduling keeps its existing grid. */
+.athlete-calendar .calendar-event{background:linear-gradient(135deg,#41131b66,#090e1266);border:1px solid #ffffff1c;border-left:3px solid #b93646;backdrop-filter:blur(12px)}
+.athlete-calendar .calendar-event strong{color:#f0f2f4}
+.athlete-calendar .calendar-event>span,.athlete-calendar .calendar-event>small{color:#aeb8c2}
+.athlete-calendar .calendar-event>div{color:#e99aa3}
+.athlete-calendar .calendar-event.completed{background:linear-gradient(135deg,#173c3266,#090e1266);border-color:#ffffff1c;border-left-color:#62ae94}
+.athlete-calendar .calendar-event.completed>div{color:#88d1b5}
+.athlete-calendar .calendar-day.current{background:linear-gradient(135deg,#49142055,#080d1366)}
+@media(max-width:700px){
+ .calendar-grid.athlete-calendar{display:flex;flex-direction:column;gap:7px;overflow:visible}
+ .athlete-calendar .calendar-day{display:grid;grid-template-columns:62px minmax(0,1fr);min-width:0;min-height:0;width:100%;padding:8px;gap:10px;flex:none;border:1px solid #ffffff16;border-radius:9px}
+ .athlete-calendar .calendar-day>header{padding:2px 5px;border:0;margin:0;min-height:0;display:flex;flex-direction:column;gap:2px;align-items:center}
+ .athlete-calendar .calendar-day>header span{font-size:10px}
+ .athlete-calendar .calendar-day>header strong{font-size:21px}
+ .athlete-calendar .calendar-day>header small{font-size:8px}
+ .athlete-calendar .calendar-event{padding:9px 11px;margin:0 0 5px;min-height:0}
+ .athlete-calendar .calendar-event strong{font-size:14px;margin:3px 0}
+ .athlete-calendar .calendar-event span,.athlete-calendar .calendar-event small{font-size:10px}
+ .athlete-calendar .calendar-rest{padding:12px 0;display:flex;flex-direction:row;gap:8px;align-items:center;font-size:12px}
+ .athlete-calendar .calendar-event>div{margin-top:6px}
+ .calendar-grid.athlete-calendar{background:transparent;border:0}
+ .athlete-calendar .calendar-rest span{margin:0}
+ .athlete-calendar .move-link{font-size:11px;margin:0 0 5px}
+}

@@ -1,3 +1,4 @@
+import {movementPrescription,MOVEMENT_TYPES} from './movement-prescriptions.mjs';
 import {prescribedCardioIntervals} from './cardio-logging.mjs';
 import {validateProgramMetadata} from './program-schedule.mjs';
 import {cardioPrescription,cardioTargetText,validateCardioPrescription} from './cardio-prescriptions.mjs';
@@ -45,8 +46,8 @@ export function loadText(item){
   return number(e.load)?`${e.load} ${unitLabel(e.loadUnit)}`:'Load needed';
 }
 export function prescriptionText(item){
-  const e=normalizePrescription(item);
-  if(e.trackingType&&e.trackingType!=='strength')return CARDIO_TYPES.includes(e.trackingType)?cardioTargetText(e):setSummary(e.metrics||{},e.trackingType);
+  const e=movementPrescription(item)||normalizePrescription(item);
+  if(e.trackingType&&e.trackingType!=='strength')return CARDIO_TYPES.includes(e.trackingType)?cardioTargetText(e):`${e.sets??1} sets · ${e.metrics?.durationSeconds||e.metrics?.distance?setSummary(e.metrics,e.trackingType):'Duration not specified'+(e.reps!=null?' (legacy '+e.reps+' reps/breaths preserved)':'')}`;
   if(e.setBlocks?.length)return e.setBlocks.map(b=>prescriptionText({...e,...b,sets:b.sets??b.count,setBlocks:undefined})).join(' + ');
   return [`${e.sets} × ${e.reps}`,loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,`${e.rest}s rest`].filter(Boolean).join(' · ');
 }
@@ -56,7 +57,7 @@ export function prescribedSets(item){const e=normalizePrescription(item);return 
 export function validatePrescription(item,library){
   if(!object(item))return [{severity:'error',message:'Invalid exercise prescription.'}];
   if(item.trackingType&&item.trackingType!=='strength'){
-    try{const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');if(CARDIO_TYPES.includes(item.trackingType))validateCardioPrescription(item,library);else prepareJournalEntry({exerciseId:item.exerciseId,sets:[item.metrics||{}]},exercise,library);return [];}catch(e){return [{severity:'error',message:e.message}];}
+    try{const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');if(CARDIO_TYPES.includes(item.trackingType))validateCardioPrescription(item,library);else {if(!Number.isInteger(item.sets??1)||(item.sets??1)<1||(item.sets??1)>12)throw Error('Sets must be 1–12.');prepareJournalEntry({exerciseId:item.exerciseId,sets:[item.metrics||{}]},exercise,library);}return [];}catch(e){return [{severity:'error',message:e.message}];}
   }
   const e=normalizePrescription(item),findings=[];
   const check=(ok,message)=>{if(!ok)findings.push({severity:'error',message});};
@@ -112,8 +113,8 @@ export function prepareProgram(input,library){
 export function recordPerformance(entries,targets,library=[]){
   if(!Array.isArray(entries)||entries.length!==targets.length)throw Error('Log every exercise.');
   return entries.map((entry,i)=>{
-    const target=cardioPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId))||normalizePrescription(targets[i]);
-    if(target.trackingType&&target.trackingType!=='strength'){if(entry.sets?.length!==prescribedCardioIntervals(target).length)throw Error('Complete every prescribed interval.');if(entry.exerciseId!==target.exerciseId)throw Error('Exercise mismatch.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
+    const target=((MOVEMENT_TYPES.includes(targets[i].trackingType)||entry.sets?.some(s=>s.durationSeconds!=null||s.distance!=null))?movementPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId)):null)||cardioPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId))||normalizePrescription(targets[i]);
+    if(target.trackingType&&target.trackingType!=='strength'){if(entry.sets?.length!==(MOVEMENT_TYPES.includes(target.trackingType)?target.sets:prescribedCardioIntervals(target).length))throw Error('Complete every prescribed interval.');if(entry.exerciseId!==target.exerciseId)throw Error('Exercise mismatch.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
     if(entry.exerciseId!==target.exerciseId||!Array.isArray(entry.sets)||(entry.actualSetGroups===true?(entry.sets.length<1||entry.sets.length>30):entry.sets.length!==target.sets))throw Error('Complete every prescribed set.');
     const perSet=prescribedSets(target);
     const sets=entry.sets.map((s,j)=>{
