@@ -29,8 +29,9 @@ Obtain the key from [Google AI Studio](https://aistudio.google.com/apikey) for a
    AI_PROVIDER=openai
    OPENAI_API_KEY=YOUR_API_KEY_HERE
    OPENAI_MODEL=gpt-4.1-mini
-   AI_TIMEOUT_MS=120000
-   AI_MAX_OUTPUT_TOKENS=24000
+   OPENAI_PROGRAM_MODEL=gpt-6.1-sol
+   AI_TIMEOUT_MS=180000
+   AI_MAX_OUTPUT_TOKENS=32768
    AI_REQUESTS_PER_HOUR=6
    AI_DEBUG=false
    ```
@@ -102,7 +103,7 @@ Set `AI_DEBUG=true` only on the development server to show a separate collapsed 
 
 ## Environment and phone preview
 
-Server configuration: `AI_ENABLED`, `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_OUTPUT_TOKENS`, `AI_REQUESTS_PER_HOUR`, `AI_DEBUG`. `.env.example` documents defaults. `pnpm dev:ai` is the local convenience launcher; a hosted deployment should use its environment/secret settings.
+Server configuration: `AI_ENABLED`, `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_PROGRAM_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_OUTPUT_TOKENS`, `AI_REQUESTS_PER_HOUR`, `AI_DEBUG`. `.env.example` documents defaults. `pnpm dev:ai` is the local convenience launcher; a hosted deployment should use its environment/secret settings.
 
 The standalone Android preview intentionally disables live generation with a clear hosted-server message. Practice drafts, existing save/assignment and logging continue to work locally. To enable live generation on a future connected Android build, point the normal client API at an authenticated hosted HTTPS Iron Heart server (`VITE_API_URL`) and configure the AI key on that server only. Do not use the device-only standalone adapter for live generation. This stage did not rebuild the APK.
 
@@ -133,3 +134,5 @@ Modified:
 - `README.md`, `docs/AI-WORKOUT-BUILDER.md`, `docs/PRESCRIPTION-PIPELINE.md`
 
 The test fixture provider is only enabled with the explicit `--test-server` flag and `AI_TEST_FIXTURE` file path. Normal server startup refuses this setting; no mock provider can be selected through the browser or a normal production configuration.
+
+Program generation can select `OPENAI_PROGRAM_MODEL=gpt-6.1-sol` independently of the legacy `OPENAI_MODEL` used for scanning. If omitted, generation retains the legacy model. The focused phone follow-up verified single-week strength, conditioning, hybrid, and six-week Jiu-Jitsu drafts using strict structured output. Keep 180 seconds for multiweek calls; the six-week live check took about 125 seconds. See [implementation and verification](PHONE-PRESCRIPTIONS-FOLLOWUP.md).

@@ -1,19 +1,22 @@
 import {validateProgrammingOptions,methodologyContext} from '../../shared/ai/programming-options.mjs';
 import {trackingProfile} from '../../shared/tracking.mjs';
 import {randomUUID} from 'node:crypto';
-import {createOpenAIProvider,GenerationError} from './openai.mjs';
+import {createOpenAIProvider,GenerationError,GENERATION_INSTRUCTIONS} from './openai.mjs';
 import {createGeminiProvider} from './gemini.mjs';
 import {validateDraft,validateDraftStructure} from '../../shared/ai/validate.mjs';
 import {SCHEMA_VERSION,DRAFT_STATUS,PROGRAM_LENGTHS} from '../../shared/ai/contract.mjs';
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const reject=message=>{throw new GenerationError('INVALID_REQUEST',message,400);};
 const bound=(value,fallback,min,max)=>{const n=Number(value??fallback);return Number.isInteger(n)&&n>=min&&n<=max?n:fallback;};
-export function generationConfig(env=process.env){const gemini=env.AI_PROVIDER==='gemini';return {enabled:env.AI_ENABLED==='true',provider:env.AI_PROVIDER||'openai',apiKey:(gemini?env.GEMINI_API_KEY:env.OPENAI_API_KEY)||'',model:gemini?(env.GEMINI_MODEL||'gemini-3.6-flash'):(env.OPENAI_MODEL||'gpt-4.1-mini'),timeoutMs:bound(env.AI_TIMEOUT_MS,120000,1000,180000),maxOutputTokens:bound(env.AI_MAX_OUTPUT_TOKENS,24000,1000,32768),requestsPerHour:bound(env.AI_REQUESTS_PER_HOUR,6,1,30),debug:env.AI_DEBUG==='true'};}
+export function generationConfig(env=process.env){const gemini=env.AI_PROVIDER==='gemini';return {enabled:env.AI_ENABLED==='true',programModel:env.OPENAI_PROGRAM_MODEL||'',provider:env.AI_PROVIDER||'openai',apiKey:(gemini?env.GEMINI_API_KEY:env.OPENAI_API_KEY)||'',model:gemini?(env.GEMINI_MODEL||'gemini-3.6-flash'):(env.OPENAI_MODEL||'gpt-4.1-mini'),timeoutMs:bound(env.AI_TIMEOUT_MS,120000,1000,180000),maxOutputTokens:bound(env.AI_MAX_OUTPUT_TOKENS,24000,1000,32768),requestsPerHour:bound(env.AI_REQUESTS_PER_HOUR,6,1,30),debug:env.AI_DEBUG==='true'};}
 export function validateGenerationInput(input,library){
   if(!object(input)||Object.keys(input).some(k=>!['request','athleteId','requirements','programming'].includes(k)))reject('Use request, optional athleteId, and optional confirmed requirements.');
   if(typeof input.request!=='string'||input.request.trim().length<10||input.request.length>2000||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(input.request))reject('Enter a training request between 10 and 2000 characters.');
   if(input.athleteId!=null&&(typeof input.athleteId!=='string'||!input.athleteId||input.athleteId.length>200))reject('Choose a valid athlete.');
   const requirements=structuredClone(input.requirements||{});
+  // Infer only an explicit block length, never training days or sessions.
+  const length=input.request.match(/\b(1|3|4|6|8|9|12|one|single|three|four|six|eight|nine|twelve)[ -]+weeks?\b/i);
+  if(requirements.programWeeks===undefined&&length)requirements.programWeeks=({one:1,single:1,three:3,four:4,six:6,eight:8,nine:9,twelve:12})[length[1].toLowerCase()]||Number(length[1]);
   if(!object(requirements)||Object.keys(requirements).some(k=>!['programWeeks','trainingDaysPerWeek','maxSessionMinutes','exerciseFrequency','primaryExerciseIds','unavailableEquipment'].includes(k)))reject('Unsupported confirmed requirement.');
   if(requirements.programWeeks!==undefined&&!PROGRAM_LENGTHS.includes(requirements.programWeeks))reject('Choose a supported number of weeks.');
   for(const [k,min,max] of [['trainingDaysPerWeek',1,7],['maxSessionMinutes',1,240]])if(requirements[k]!==undefined&&(!Number.isInteger(requirements[k])||requirements[k]<min||requirements[k]>max))reject(`Invalid ${k}.`);
@@ -23,8 +26,8 @@ export function validateGenerationInput(input,library){
   let programming;try{programming=validateProgrammingOptions(input.programming);}catch(e){reject(e.message);}return {request:input.request,athleteId:input.athleteId??null,requirements,...(programming?{programming}:{})};
 }
 // No storage/write APIs are accepted by this service. Context is an explicit allowlist.
-export function createGenerationService({config=generationConfig(),provider,production=false,now=()=>Date.now(),newId=randomUUID}={}){
-  const adapter=provider||(config.provider==='gemini'?createGeminiProvider(config):createOpenAIProvider(config)),attempts=new Map(),active=new Set();
+export function createGenerationService({config=generationConfig(),provider,production=false,now=()=>Date.now(),newId=randomUUID,logger=event=>console.info(JSON.stringify(event))}={}){
+  const adapter=provider||(config.provider==='gemini'?createGeminiProvider(config):createOpenAIProvider({...config,model:config.programModel||config.model})),attempts=new Map(),active=new Set();
   const available=!!provider||(config.enabled&&['openai','gemini'].includes(config.provider)&&!!config.apiKey);
   return {
     status(){return {available,provider:adapter.name,model:adapter.model,debug:config.debug&&!production,reason:available?null:'Live generation requires server-side AI provider configuration.'};},
@@ -38,22 +41,32 @@ export function createGenerationService({config=generationConfig(),provider,prod
       const recent=attempts.get(coachId)||[];
       if(recent.length>=config.requestsPerHour)throw new GenerationError('GENERATION_RATE_LIMIT','Your hourly generation limit has been reached. Try again later.',429);
       attempts.set(coachId,[...recent,time]);active.add(coachId);
+      let usage=[],completionAttempts=0,repairErrorCode;
+      const audit=(status,code)=>{try{logger({event:'ai_program_generation',provider:adapter.name,model:adapter.model,status,...(code?{code}:{}),durationMs:Math.max(0,now()-time),completionAttempts,usage});}catch{}};
       try{
         const context={exercise_library:library.map(e=>({exerciseId:e.id,name:e.name,region:e.region,equipment:e.equipment,movementPattern:e.pattern,trackingType:trackingProfile(e)})),confirmed_requirements:value.requirements,athlete:athlete?{sport:athlete.sport}:null};
         if(value.programming)context.iron_heart_methodology=methodologyContext(value.programming);
         if(JSON.stringify(context).length>60000)reject('Exercise context is too large. Reduce the library size.');
-        let output;try{output=await adapter.generateProgramDraft(value.request,context);}catch(e){if(e instanceof GenerationError)throw e;throw new GenerationError('PROVIDER_UNAVAILABLE','AI generation failed. Try again later.');}
+        let output;try{completionAttempts++;output=await adapter.generateProgramDraft(value.request,context,{onUsage:u=>usage.push(u)});}catch(e){if(e instanceof GenerationError)throw e;throw new GenerationError('PROVIDER_UNAVAILABLE','AI generation failed. Try again later.');}
         if(!object(output)||Buffer.byteLength(JSON.stringify(output))>80000)throw new GenerationError('INVALID_OUTPUT','AI returned an invalid or oversized draft. Request a smaller block.');
         if(validateDraftStructure(output).length)throw new GenerationError('CONTRACT_MISMATCH','AI returned a draft that does not match the workout contract. Try again with a clearer or smaller request.');
+        const expected=value.requirements.programWeeks||output.program.weeks;
+        if(expected&&output.program.plan.length<expected){
+          // One bounded repair attempt, preserving the first reviewable draft on failure.
+          try{completionAttempts++;const repair=await adapter.generateProgramDraft(value.request,{...context,confirmed_requirements:{...value.requirements,programWeeks:expected}},{timeoutMs:Math.max(1,180000-(now()-time)),instructions:GENERATION_INSTRUCTIONS+' The previous response omitted weeks. Return ALL '+expected+' sequential weeks, even when exercises have unresolved IDs. Keep notes concise.',onUsage:u=>usage.push(u)});
+            if(object(repair)&&Buffer.byteLength(JSON.stringify(repair))<=80000&&!validateDraftStructure(repair).length&&repair.program.weeks===expected&&repair.program.plan.length===expected)output=repair;
+          }catch(e){repairErrorCode=e instanceof GenerationError?e.code:'PROVIDER_UNAVAILABLE';}
+        }
         const hasRir=v=>v&&typeof v==='object'&&(v.effortMode==='rir'||v.rir!=null||Object.values(v).some(x=>x&&typeof x==='object'&&hasRir(x)));
         if(hasRir(output))throw new GenerationError('UNSUPPORTED_EFFORT','New AI prescriptions must use RPE or standard sets/reps.');
         // Provider status, claimed validation, linkage, and rewritten prompt cannot grant authority.
         const draft={...structuredClone(output),status:DRAFT_STATUS.DRAFT,athleteId:value.athleteId,sourceProgramId:null,originalRequest:value.request,validationFindings:[]};
         const validation=validateDraft(draft,library,value.requirements);
         draft.validationFindings=validation.findings;draft.status=validation.findings.length?DRAFT_STATUS.NEEDS_REVIEW:DRAFT_STATUS.DRAFT;
-        const metadata={provider:adapter.name,model:adapter.model,generatedAt:new Date(now()).toISOString(),schemaVersion:draft.schemaVersion,durationMs:Math.max(0,now()-time)};
+        const metadata={provider:adapter.name,model:adapter.model,generatedAt:new Date(now()).toISOString(),schemaVersion:draft.schemaVersion,durationMs:Math.max(0,now()-time),completionAttempts,usage,...(repairErrorCode?{repairErrorCode}:{})};
+        audit('completed');
         return {generationId:newId(),draft,requirements:value.requirements,...(value.programming?{programming:value.programming}:{}),validation,metadata,...(config.debug&&!production?{debug:{coachRequest:value.request,structuredResponse:structuredClone(draft),validationFindings:validation.findings,durationMs:metadata.durationMs}}:{})};
-      }finally{active.delete(coachId);}
+      }catch(error){audit('failed',error instanceof GenerationError?error.code:'PROVIDER_UNAVAILABLE');throw error;}finally{active.delete(coachId);}
     }
   };
 }

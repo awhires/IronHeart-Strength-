@@ -45,7 +45,7 @@ test('AI percentage derives weight only from a valid matching reference and roun
   e.reference1RM={...e.reference1RM,value:100,unit:LOAD_UNIT.KG};assert.equal(percentageLoad(e,exercises),165);
   e.loadUnit=LOAD_UNIT.KG;assert.equal(percentageLoad(e,exercises),75);
 });
-test('AI missing or invalid reference maximum blocks approval and never invents a load',()=>{
+test('AI missing reference warns; invalid reference blocks; neither invents a load',()=>{
   const d=createFixture('percentage'),e=first(d);e.reference1RM=null;assert.ok(codes(d).includes('MISSING_REFERENCE_1RM'));assert.equal(percentageLoad(e,exercises),null);
   for(const change of [{exerciseId:'squat'},{date:'2026-02-30'},{value:0},{type:'guessed'}]){
     const x=createFixture('percentage');Object.assign(first(x).reference1RM,change);assert.ok(codes(x).includes('INVALID_REFERENCE_1RM'));assert.equal(percentageLoad(first(x),exercises),null);

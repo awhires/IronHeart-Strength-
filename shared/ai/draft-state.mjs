@@ -27,8 +27,8 @@ export function approveReview(review,library,requirements={},options={}){
   if(result.counts[SEVERITY.WARNING]&&!options.warningsReviewed)throw new Error('Review and acknowledge the warnings before approving.');
   if(!options.coachId)throw new Error('A reviewing coach is required.');
   const draft={...structuredClone(review.draft),status:DRAFT_STATUS.APPROVED,validationFindings:result.findings};
-  return {...structuredClone(review),draft,approval:{coachId:options.coachId,revision:review.revision,reviewedAt:options.reviewedAt||new Date().toISOString(),signature:signature(draft,library,requirements)}};
+  return {...structuredClone(review),draft,approval:{warningsReviewed:options.warningsReviewed===true,coachId:options.coachId,revision:review.revision,reviewedAt:options.reviewedAt||new Date().toISOString(),signature:signature(draft,library,requirements)}};
 }
 export function isApproved(review,library,requirements={}){
-  return review?.draft?.status===DRAFT_STATUS.APPROVED&&!!review.approval&&review.approval.revision===review.revision&&review.approval.signature===signature(review.draft,library,requirements)&&validateDraft(review.draft,library,requirements).canApprove;
+  return review?.draft?.status===DRAFT_STATUS.APPROVED&&!!review.approval&&review.approval.revision===review.revision&&review.approval.signature===signature(review.draft,library,requirements)&&(validateDraft(review.draft,library,requirements).counts.warning===0||review.approval.warningsReviewed===true)&&validateDraft(review.draft,library,requirements).canApprove;
 }

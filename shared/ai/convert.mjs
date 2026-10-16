@@ -17,5 +17,5 @@ export function toIronHeartProgram(review,library,requirements={}){
   // One Week 1 object in memory. JSON serialization creates a derived compatibility
   // projection; plan[0] remains authoritative when the save adapter is implemented.
   program.sessions=program.plan[0].sessions;
-  return {...program,aiProvenance:{schemaVersion:review.draft.schemaVersion,sourceProgramId:review.draft.sourceProgramId,originalRequest:review.draft.originalRequest,approvedRevision:review.revision,approvedBy:review.approval.coachId,approvedAt:review.approval.reviewedAt}};
+  return {...program,aiProvenance:{schemaVersion:review.draft.schemaVersion,warningsAccepted:review.approval.warningsReviewed===true,acceptedWarningCodes:[...new Set(result.findings.filter(f=>f.severity==='warning').map(f=>f.code))],sourceProgramId:review.draft.sourceProgramId,originalRequest:review.draft.originalRequest,approvedRevision:review.revision,approvedBy:review.approval.coachId,approvedAt:review.approval.reviewedAt}};
 }

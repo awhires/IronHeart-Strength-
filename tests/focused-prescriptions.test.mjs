@@ -28,7 +28,7 @@ test('explicit strength metadata and grouped rows support coach progression acro
  assert.throws(()=>generateBlock(input,4,{method:'westside',rules:{'0:0:bench':{mode:'speed-bench',referenceMax:300}}}),/single prescription/);
 });
 test('unsupported progression modes and mixed grouped targets remain held',()=>{
- for(const item of [{...strength,loadMode:'percentage'},{...strength,loadMode:'athlete_selected'},{...strength,exerciseId:'plank'},{...strength,trackingType:'erg'},{...strength,setBlocks:[{sets:3,loadMode:'bodyweight'}]}])assert.equal(supportsCoachProgression(item),false);
+ for(const item of [{...strength,exerciseId:'plank'},{...strength,trackingType:'erg'},{...strength,setBlocks:[{sets:3,loadMode:'bodyweight'}]}])assert.equal(supportsCoachProgression(item),false);
 });
 test('static holds use time; dynamic plank movements and legitimate reps are not converted',()=>{
  for(const name of ['Forearm Plank','Side Plank','Wall Sit','Dead Hang','Hollow Body Hold'])assert.equal(trackingProfile({name,trackingType:'strength'}),'timed');

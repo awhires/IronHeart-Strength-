@@ -55,7 +55,7 @@ test('richer targets are preserved by legacy periodization and held by recommend
     const history=[{target:e,readiness:1,sets:[{load:30,reps:5,rpe:10}]}];assert.equal(recommend(e,history).action,'hold');
     const sessions=[{name:'A',day:1,exercises:[e]}];assert.equal(generateBlock(sessions,4)[3].sessions[0].exercises[0].load,e.load);
     assert.equal(generateWestsideBlock(sessions,4)[3].sessions[0].exercises[0].load,e.load);
-    assert.throws(()=>generateWestsideBlock(sessions,4,{rules:{'0:0:bench':{mode:'repetition',increase:2}}}),/fixed pounds/);
+    if(patch.effortMode==='rir')assert.equal(generateWestsideBlock(sessions,4,{rules:{'0:0:bench':{mode:'repetition',increase:2}}})[1].sessions[0].exercises[0].load>0,true);else assert.throws(()=>generateWestsideBlock(sessions,4,{rules:{'0:0:bench':{mode:'repetition',increase:2}}}),/fixed pounds|external-weight/);
   }
 });
 test('approval receipt binds revision, coach, library and expiry; retries do not duplicate',()=>{

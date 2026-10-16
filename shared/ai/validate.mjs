@@ -74,10 +74,10 @@ export function validateDraft(draft,library=[],requirements={}){
   shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',add);
   const p=draft?.program;
   if(record(p)){
-    if(requirements.programWeeks!==undefined&&p.weeks!==requirements.programWeeks)add('PROGRAM_LENGTH_MISMATCH','/program/weeks',`Requested ${requirements.programWeeks} weeks; draft has ${p.weeks??'no selected length'}.`,SEVERITY.WARNING);
+    if(requirements.programWeeks!==undefined&&p.weeks!==requirements.programWeeks)add('PROGRAM_LENGTH_MISMATCH','/program/weeks',`Requested ${requirements.programWeeks} weeks; draft has ${p.weeks??'no selected length'}. Regenerate with the requested duration or explicitly change the confirmed requirement.`,SEVERITY.ERROR);
     if(p.weeks==null)add('MISSING_PROGRAM_LENGTH','/program/weeks','Choose the number of weeks. Four training days does not mean four weeks.');
     if(Array.isArray(p.plan)){
-      if(Number.isInteger(p.weeks)&&p.plan.length!==p.weeks)add('INCOMPLETE_WEEK','/program/plan',`Expected ${p.weeks} complete weeks; received ${p.plan.length}.`);
+      if(Number.isInteger(p.weeks)&&p.plan.length!==p.weeks)add('INCOMPLETE_WEEK','/program/plan',`Expected ${p.weeks} complete weeks; received ${p.plan.length}. This is an incomplete AI response, not a progression-dropdown failure. Regenerate with the intended duration selected; unresolved library movements do not generate missing weeks.`);
       const weeks=new Set();
       p.plan.forEach((w,wi)=>{
         const wp=`/program/plan/${wi}`;
@@ -98,9 +98,9 @@ export function validateDraft(draft,library=[],requirements={}){
           s.exercises.forEach((e,ei)=>{
             if(!record(e))return;
             const ep=`${sp}/exercises/${ei}`,known=library.find(x=>x.id===e.exerciseId);
-            if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,'Exercise needs library match.',SEVERITY.ERROR,'Select an existing library exercise.');
+            if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,`“${e.exerciseName}” needs a library match (Week ${w.week}, ${s.name}).`,SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
-            if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Choose another exercise.`);
+            if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Review your equipment choice.`,SEVERITY.WARNING);
             if(e.trackingType){try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
             if(known&&CARDIO_TYPES.includes(trackingProfile(known)))add('CARDIO_REQUIRES_TYPED_PRESCRIPTION',ep,'Use a v2 cardio prescription with distance/time metrics, not strength sets/reps.');
             if(e.loadMode===LOAD_MODE.FIXED&&(!number(e.load)||e.load<=0))add('MISSING_LOAD',`${ep}/load`,'Fixed loading needs a positive prescribed weight; blank is not zero.');
@@ -109,7 +109,7 @@ export function validateDraft(draft,library=[],requirements={}){
             if(e.loadMode!==LOAD_MODE.PERCENTAGE&&(e.percent1RM!==null||e.reference1RM!==null))add('CONFLICTING_LOAD_MODE',`${ep}/loadMode`,'Percentage and reference maximum require percentage loading.');
             if(e.loadMode===LOAD_MODE.PERCENTAGE){
               if(!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100)add('INVALID_PERCENT_1RM',`${ep}/percent1RM`,'Enter a percentage greater than 0 and at most 100.');
-              if(e.reference1RM===null)add('MISSING_REFERENCE_1RM',`${ep}/reference1RM`,'A valid reference maximum is required before calculating weight.',SEVERITY.ERROR,'Enter the matching lift, maximum, unit, source type, and date.');
+              if(e.reference1RM===null)add('MISSING_REFERENCE_1RM',`${ep}/reference1RM`,'No reference maximum: keep the percentage target; an athlete-specific baseline or coach-entered maximum is needed to suggest weight.',SEVERITY.WARNING,'Enter the matching lift, maximum, unit, source type, and date.');
               else if(!validReference(e,library))add('INVALID_REFERENCE_1RM',`${ep}/reference1RM`,'Check the reference exercise, maximum, unit, type, and calendar date.');
               const calculated=percentageLoad(e,library);
               if(calculated!==null&&calculated<=0)add('INVALID_CALCULATED_LOAD',`${ep}/increment`,'This rounding increment produces zero weight. Choose a smaller increment.');
@@ -136,7 +136,7 @@ export function validateDraft(draft,library=[],requirements={}){
       });
     }
   }
-  if(Array.isArray(draft?.questions)&&draft.questions.some(q=>typeof q==='string'&&q.trim()))add('OPEN_QUESTIONS','/questions','Resolve the draft’s open questions before approval.');
+  if(Array.isArray(draft?.questions)&&draft.questions.some(q=>typeof q==='string'&&q.trim()))add('OPEN_QUESTIONS','/questions','Review the draft’s open questions; acknowledge any unanswered programming choices before approval.',SEVERITY.WARNING);
   if(Array.isArray(draft?.assumptions)&&draft.assumptions.length)add('REVIEW_ASSUMPTIONS','/assumptions','Review the assumptions used to prepare this draft.',SEVERITY.WARNING);
   const unique=findings.filter((f,i)=>findings.findIndex(g=>g.code===f.code&&g.path===f.path)===i);
   const counts=Object.fromEntries(Object.values(SEVERITY).map(s=>[s,unique.filter(f=>f.severity===s).length]));

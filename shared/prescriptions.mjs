@@ -1,4 +1,5 @@
 import {movementPrescription,MOVEMENT_TYPES} from './movement-prescriptions.mjs';
+import {validateAdaptiveRule} from './adaptive-rules.mjs';
 import {prescribedCardioIntervals} from './cardio-logging.mjs';
 import {validateProgramMetadata} from './program-schedule.mjs';
 import {cardioPrescription,cardioTargetText,validateCardioPrescription} from './cardio-prescriptions.mjs';
@@ -56,6 +57,7 @@ export function prescribedSets(item){const e=normalizePrescription(item);return 
 
 export function validatePrescription(item,library){
   if(!object(item))return [{severity:'error',message:'Invalid exercise prescription.'}];
+  try{validateAdaptiveRule(item.adaptiveProgression);}catch(e){return [{severity:'error',message:e.message}];}
   if(item.trackingType&&item.trackingType!=='strength'){
     try{const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');if(CARDIO_TYPES.includes(item.trackingType))validateCardioPrescription(item,library);else {if(!Number.isInteger(item.sets??1)||(item.sets??1)<1||(item.sets??1)>12)throw Error('Sets must be 1–12.');prepareJournalEntry({exerciseId:item.exerciseId,sets:[item.metrics||{}]},exercise,library);}return [];}catch(e){return [{severity:'error',message:e.message}];}
   }
