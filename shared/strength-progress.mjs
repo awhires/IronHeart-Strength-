@@ -1,4 +1,4 @@
-import {convertWeight} from './ai/contract.mjs';
+import {convertWeight,REFERENCE_TYPE} from './ai/contract.mjs';
 import {workoutDate} from './volume-stats.mjs';
 import {trackingProfile} from './tracking.mjs';
 
@@ -16,7 +16,7 @@ export function estimateMax(load,reps,repMax=1,method=DEFAULT_METHOD){
   return one===null?null:one*NSCA_PERCENT[repMax];
 }
 export function strengthProgress(logs,exerciseId,athleteId,library=[]){
-  const performances=[],monthly=new Map(),actualBests={};
+  const performances=[],monthly=new Map(),actualBests={},evidence=[];
   for(const log of logs||[]){
     if(log.athleteId!==athleteId)continue;
     const date=workoutDate(log);if(!date)continue;
@@ -26,19 +26,29 @@ export function strengthProgress(logs,exerciseId,athleteId,library=[]){
         const unit=set.loadUnit??entry.target?.loadUnit??'lbs';
         if(set.completed===false||set.warmup===true||set.isWarmup===true||set.type==='warmup'||!Number.isFinite(set.load)||set.load<=0||!Number.isInteger(set.reps)||set.reps<1||!['lbs','kg'].includes(unit))continue;
         const loadLb=convertWeight(set.load,unit,'lbs');
-        const actual={kind:'actual',logId:log.id,exerciseId,exerciseIndex,setIndex,date,sessionName:log.sessionName,load:set.load,loadUnit:unit,loadLb,reps:set.reps,rpe:set.rpe??null,rir:set.rir??null};
+        const actual={kind:'actual',logId:log.id,exerciseId,exerciseIndex,setIndex,date,sessionName:log.sessionName,load:set.load,loadUnit:unit,loadLb,reps:set.reps,rpe:set.rpe??null,rir:set.rir??null,assignmentId:log.assignmentId,week:log.week,session:log.session};
         performances.push(actual);
         if(!actualBests[set.reps]||actualBests[set.reps].loadLb<loadLb)actualBests[set.reps]=actual;
         // Chart estimates require supported reps; known easy sets do not imply rep maxima.
         if((set.rpe!=null&&(!Number.isFinite(set.rpe)||set.rpe<8||set.rpe>10))||(set.rir!=null&&(!Number.isFinite(set.rir)||set.rir>2||set.rir<0)))continue;
+        if(log.pain||log.readiness<=2||/deload|dynamic effort|speed|technique|recovery/i.test(entry.target?.phase||''))continue;
         const oneRM=estimateMax(loadLb,set.reps);if(oneRM===null)continue;
         const month=date.slice(0,7),point={kind:'estimate',month,method:DEFAULT_METHOD,source:NSCA_SOURCE,estimates:Object.fromEntries(REP_MAXES.map(r=>[r,estimateMax(loadLb,set.reps,r)])),performance:actual,effortKnown:set.rpe!=null||set.rir!=null};
+        evidence.push({...point,oneRM});
         const old=monthly.get(month);
         if(!old||oneRM>old.estimates[1]||(oneRM===old.estimates[1]&&date>old.performance.date))monthly.set(month,point);
       }
     }
   }
-  return {exerciseId,athleteId,method:DEFAULT_METHOD,monthly:[...monthly.values()].sort((a,b)=>a.month.localeCompare(b.month)),actualBests,performances};
+  const today=workoutDate({createdAt:new Date().toISOString()});
+  const months=new Set(monthly.keys());
+  if(activeStrengthEvidence(evidence,today).length)months.add(today.slice(0,7));
+  const points=[...months].sort().map(month=>{
+    const end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+    const best=activeStrengthEvidence(evidence,end<today?end:today)[0];
+    return best?{...best,month}:null;
+  }).filter(Boolean);
+  return {exerciseId,athleteId,method:DEFAULT_METHOD,monthly:points,current:activeStrengthEvidence(evidence,today)[0]||null,actualBests,performances,evidence};
 }
 export function strengthAxis(values,goal){
   const valid=values.filter(v=>Number.isFinite(v)&&v>0),highest=Math.max(0,...valid);
@@ -50,4 +60,16 @@ export function prepareStrengthGoal(input,library,athleteId,now=new Date().toISO
   if(!exercise||trackingProfile(exercise)!=='strength')throw Error('Choose a strength exercise.');
   if(!REP_MAXES.includes(input.repMax)||!Number.isFinite(input.targetLb)||input.targetLb<=0||input.targetLb>5000)throw Error('Choose a rep max and a goal above 0 and at most 5000 lb.');
   return {id:JSON.stringify([athleteId,exercise.id,input.repMax]),version:1,athleteId,exerciseId:exercise.id,repMax:input.repMax,targetLb:input.targetLb,comparison:'estimated',method:DEFAULT_METHOD,updatedAt:now};
+}
+
+export const STRENGTH_WINDOW_DAYS=56;
+const utcDay=date=>Date.parse(date+'T00:00:00Z');
+export function activeStrengthEvidence(evidence,asOf){
+ return evidence.filter(e=>{const age=utcDay(asOf)-utcDay(e.performance.date);return age>=0&&age<=STRENGTH_WINDOW_DAYS*86400000;}).sort((a,b)=>b.oneRM-a.oneRM||b.performance.date.localeCompare(a.performance.date)||a.performance.setIndex-b.performance.setIndex);
+}
+export function athleteStrengthProfile(logs,exerciseId,athleteId,library=[],asOf=workoutDate({createdAt:new Date().toISOString()}),referenceMaxima=[]){
+ const history=strengthProgress(logs,exerciseId,athleteId,library),activeEvidence=activeStrengthEvidence(history.evidence,asOf),best=activeEvidence[0]||null;
+ const references=referenceMaxima.filter(r=>r&&r.exerciseId===exerciseId&&Object.values(REFERENCE_TYPE).includes(r.type)&&['lbs','kg'].includes(r.unit)&&Number.isFinite(r.value)&&r.value>0&&convertWeight(r.value,r.unit,'lbs')<=1200&&/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')&&utcDay(r.date)<=utcDay(asOf)&&utcDay(asOf)-utcDay(r.date)<=56*86400000).map(r=>({...r,oneRM:convertWeight(r.value,r.unit,'lbs')})).sort((a,b)=>b.oneRM-a.oneRM);
+ return {version:1,exerciseId,athleteId,asOf,windowDays:STRENGTH_WINDOW_DAYS,history:history.performances,activeEvidence,currentEstimate:best,estimated1RM:best?.oneRM??null,
+ referenceMaxima:references,actualTestedMax:references.find(r=>r.type==='tested')||null,coachReferenceMax:references.find(r=>r.type==='coach_entered')||null};
 }

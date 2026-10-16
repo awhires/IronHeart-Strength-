@@ -82,7 +82,8 @@ export default function AIDraftReview({exercises,coachId,request,onSaved,initial
         </div>
         <div className="ai-fields ai-prescription-fields">
           {field(`${prefix} sets`,`${ep}/sets`,<NumberInput value={e.sets} min="1" max="12" step="1" onChange={v=>exercise(si,ei,'sets',v)}/>)}
-          {field(`${prefix} reps`,`${ep}/reps`,<NumberInput value={e.reps} min="1" max="50" step="1" onChange={v=>exercise(si,ei,'reps',v)}/>)}
+          {field(`${prefix} rep mode`,`${ep}/repMode`,<select value={e.repMode||'fixed'} onChange={event=>edit(d=>{const target=d.program.plan[weekIndex].sessions[si].exercises[ei];target.repMode=event.target.value;target.reps=target.repMode==='max'?null:8;})}><option value="fixed">Fixed reps</option><option value="max">Max Reps</option></select>)}
+          {e.repMode!=='max'&&field(`${prefix} reps`,`${ep}/reps`,<NumberInput value={e.reps} min="1" max="50" step="1" onChange={v=>exercise(si,ei,'reps',v)}/>)}
           {field(`${prefix} load mode`,`${ep}/loadMode`,<select value={e.loadMode} onChange={ev=>exercise(si,ei,'loadMode',ev.target.value)}>{Object.values(LOAD_MODE).map(mode=><option key={mode} value={mode}>{LOAD_LABELS[mode]}</option>)}</select>)}
           {field(`${prefix} load`,`${ep}/load`,<NumberInput value={e.load} min="0" max="1200" step="any" placeholder="Not prescribed" onChange={v=>exercise(si,ei,'load',v)}/>)}
           {field(`${prefix} weight unit`,`${ep}/loadUnit`,<select value={e.loadUnit} onChange={ev=>exercise(si,ei,'loadUnit',ev.target.value)}>{Object.values(LOAD_UNIT).map(unit=><option key={unit}>{unit}</option>)}</select>)}

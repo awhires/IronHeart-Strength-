@@ -2,7 +2,7 @@ import {trackingProfile} from '../shared/tracking.mjs';
 import {validateAdaptiveRule} from '../shared/adaptive-rules.mjs';
 import {normalizePrescription} from '../shared/prescriptions.mjs';
 import {LOAD_MODE, EFFORT_MODE, LOAD_UNIT} from '../shared/ai/contract.mjs';
-export function supportsLoadProgression(item){const e=normalizePrescription(item);return trackingProfile({id:e.exerciseId,name:e.exerciseName,trackingType:e.trackingType})==='strength'&&!e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
+export function supportsLoadProgression(item){const e=normalizePrescription(item);return trackingProfile({id:e.exerciseId,name:e.exerciseName,trackingType:e.trackingType})==='strength'&&e.repMode!=='max'&&!e.setBlocks?.length&&e.loadMode===LOAD_MODE.FIXED&&e.effortMode===EFFORT_MODE.RPE&&e.loadUnit===LOAD_UNIT.LBS&&Number.isFinite(e.load)&&Number.isFinite(e.rpe);}
 export function supportsCoachProgression(item){
  const e=normalizePrescription(item);
  if(trackingProfile({id:e.exerciseId,name:e.exerciseName,trackingType:e.trackingType})!=='strength')return false;

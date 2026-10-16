@@ -1,4 +1,4 @@
-import {sessionRecommendations} from '../shared/adaptive-prescriptions.mjs';
+import {sessionRecommendations,withAthleteRecommendations} from '../shared/adaptive-prescriptions.mjs';
 import {prepareStrengthGoal} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,weekdayDate} from '../shared/program-schedule.mjs';
 import {missingConditioningExercises,missingSingleUnders} from '../shared/conditioning-library.mjs';
@@ -102,7 +102,7 @@ export function createLocalDemo(storage){
         if(!b.exercises||b.exercises.length!==s.exercises.length)throw Error('Complete every exercise.');
         const recorded=recordPerformance(b.exercises,s.exercises,state.exercises);
         const blockResults=recordBlockScores(b.blockResults,s.blocks);
-        result=save('logs',{...b,id:id(),athleteId:user.id,sessionName:s.name,createdAt:new Date().toISOString(),exercises:recorded,...(s.exercises.some(e=>e.adaptiveProgression)?{recommendations:sessionRecommendations(a,b.week,b.session,state.logs,state.exercises),recommendationsComputedAt:new Date().toISOString()}:{}),...(blockResults.length?{blockResults,blocks:clone(s.blocks)}:{})});
+        result=save('logs',{...b,id:id(),athleteId:user.id,sessionName:s.name,createdAt:new Date().toISOString(),exercises:recorded,...(sessionRecommendations(a,b.week,b.session,state.logs,state.exercises).some(rows=>rows.length)?{recommendations:sessionRecommendations(a,b.week,b.session,state.logs,state.exercises),recommendationsComputedAt:new Date().toISOString()}:{}),...(blockResults.length?{blockResults,blocks:clone(s.blocks)}:{})});
       }else if(route==='recommendations'){
         coach();const a=owned(url.searchParams.get('id')),week=a.plan.find(w=>w.week===Number(url.searchParams.get('week')));if(!week)throw Error('Week not found.');
         result=week.sessions.flatMap((s,si)=>s.exercises.map((e,ei)=>({session:si,index:ei,exerciseId:e.exerciseId,current:e.load,...recommend(e,state.logs.filter(l=>l.athleteId===a.athleteId&&l.source!=='tracker').sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).flatMap(l=>l.exercises.filter(x=>x.exerciseId===e.exerciseId).map(x=>({...x,pain:l.pain,readiness:l.readiness}))))})));
@@ -122,6 +122,6 @@ export function createLocalDemo(storage){
     // Persist before acknowledging success; quota failures leave the prior state intact.
     if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){state.workoutReceipts={...(state.workoutReceipts||{}),[receiptKey]:{id:result.id,payload:JSON.stringify({route,b})}};}
     storage.setItem(KEY,JSON.stringify(state));
-    return route==='data'?normalizeData(result):clone(result);
+    return route==='data'?withAthleteRecommendations(normalizeData(result)):clone(result);
   };
 }

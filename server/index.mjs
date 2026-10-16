@@ -1,4 +1,4 @@
-import {sessionRecommendations} from '../shared/adaptive-prescriptions.mjs';
+import {sessionRecommendations,withAthleteRecommendations} from '../shared/adaptive-prescriptions.mjs';
 import {prepareStrengthGoal} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,validDate,weekdayDate} from '../shared/program-schedule.mjs';
 import {workoutReceipts} from './workout-receipts.mjs';
@@ -133,13 +133,13 @@ const server=http.createServer(async(req,res)=>{
         const blockResults=checked(()=>recordBlockScores(b.blockResults,s.blocks));
         const recorded=checked(()=>recordPerformance(b.exercises,s.exercises,all('exercise')));
         if(all('log').some(l=>l.assignmentId===a.id&&l.week===b.week&&l.session===b.session))fail(409,'This session is already recorded.');
-        result=receipt.commit(()=>put('log',{id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),readiness:b.readiness,pain:b.pain,notes:b.notes||'',exercises:recorded,...(s.exercises.some(e=>e.adaptiveProgression)?{recommendations:sessionRecommendations(a,b.week,b.session,all('log'),all('exercise')),recommendationsComputedAt:new Date().toISOString()}:{}),...(blockResults.length?{blockResults,blocks:s.blocks}:{})},u.id));}
+        result=receipt.commit(()=>put('log',{id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),readiness:b.readiness,pain:b.pain,notes:b.notes||'',exercises:recorded,...(sessionRecommendations(a,b.week,b.session,all('log'),all('exercise')).some(rows=>rows.length)?{recommendations:sessionRecommendations(a,b.week,b.session,all('log'),all('exercise')),recommendationsComputedAt:new Date().toISOString()}:{}),...(blockResults.length?{blockResults,blocks:s.blocks}:{})},u.id));}
       }
       else if(route==='/api/recommendations'&&req.method==='GET'){coach();const a=owned(url.searchParams.get('id'));const week=a.plan.find(w=>w.week===Number(url.searchParams.get('week')));if(!week)fail(400,'Week not found.');result=week.sessions.flatMap((s,si)=>s.exercises.map((e,ei)=>{const history=all('log').filter(l=>l.athleteId===a.athleteId&&l.source!=='tracker').sort((x,y)=>x.createdAt.localeCompare(y.createdAt)).flatMap(l=>l.exercises.filter(x=>x.exerciseId===e.exerciseId).map(x=>({...x,pain:l.pain,readiness:l.readiness})));return {session:si,index:ei,exerciseId:e.exerciseId,current:e.load,...recommend(e,history)};}));}
       else if(route==='/api/account'&&req.method==='DELETE'){if(u.role!=='athlete')fail(400,'Coach account removal requires administrator maintenance.');db.prepare('DELETE FROM records WHERE owner=?').run(u.id);db.prepare('DELETE FROM users WHERE id=?').run(u.id);res.setHeader('Set-Cookie','ihs_session=; HttpOnly; Path=/; Max-Age=0');result={ok:true};}
       else fail(404,'Not found.');
     }
-    res.end(JSON.stringify(route==='/api/data'?normalizeData(result):result));
+    res.end(JSON.stringify(route==='/api/data'?withAthleteRecommendations(normalizeData(result)):result));
   }catch(error){res.writeHead(error.status||500);res.end(JSON.stringify({error:error.status?error.message:'Something went wrong. Please try again.',...(error instanceof GenerationError?{code:error.code}:{})}));if(!error.status)console.error(error);}
 });
 // The explicit development mode overrides stale HOST/PORT values from local env files.

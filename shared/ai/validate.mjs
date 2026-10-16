@@ -98,6 +98,7 @@ export function validateDraft(draft,library=[],requirements={}){
           s.exercises.forEach((e,ei)=>{
             if(!record(e))return;
             const ep=`${sp}/exercises/${ei}`,known=library.find(x=>x.id===e.exerciseId);
+            if(!e.trackingType&&((e.repMode==='max'&&e.reps!==null)||(e.repMode!=='max'&&!Number.isInteger(e.reps))))add('INVALID_REPS',`${ep}/reps`,'Use numeric fixed reps or explicit Max Reps with null reps.');
             if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,`“${e.exerciseName}” needs a library match (Week ${w.week}, ${s.name}).`,SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
             if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Review your equipment choice.`,SEVERITY.WARNING);

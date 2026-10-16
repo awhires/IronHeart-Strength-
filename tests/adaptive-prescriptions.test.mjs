@@ -1,3 +1,4 @@
+import {workoutDate} from '../shared/volume-stats.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recommendAthleteLoad,sessionRecommendations} from '../shared/adaptive-prescriptions.mjs';
@@ -31,10 +32,10 @@ test('uses actual 1/3/5RM assessment or journal sets without requiring Week 1; N
  const e=target();e.reference1RM={exerciseId:'bench',value:250,unit:'lbs',type:'tested',date:'2026-10-15'};
  const r=recommendAthleteLoad(e,{...context,logs:[]});assert.equal(r.load,200);assert.equal(r.baseline.source,'reference maximum');
 });
-test('recent comparable low-effort sets support selected loads but never invent a maximum',()=>{
+test('known low-effort work stays in history but does not establish strength estimates',()=>{
  const l=logged();l.exercises[0].sets[0].rpe=6;
  assert.equal(recommendAthleteLoad(target(),{...context,logs:[l]}).status,'unavailable');
- const e={...target(),loadMode:'athlete_selected',percent1RM:null};assert.equal(recommendAthleteLoad(e,{...context,logs:[l]}).load,210);
+ const e={...target(),loadMode:'athlete_selected',percent1RM:null};assert.equal(recommendAthleteLoad(e,{...context,logs:[l]}).status,'unavailable');
 });
 test('guards ownership, date, stale history, warmups, unsupported reps, pain and recovery',()=>{
  for(const l of [logged({athleteId:'other'}),logged({workoutDate:'2026-10-30'}),logged({workoutDate:'2025-01-01'}),logged({pain:true}),logged({readiness:1})])assert.notEqual(recommendAthleteLoad(target(),{...context,logs:[l]}).status,'recommended');
@@ -60,9 +61,9 @@ test('actual override records original prescription separately; grouped recommen
 test('local preview saves adaptive rule, baseline, actual override and receipt snapshot across reload',async()=>{
  const values=new Map(),storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)};let api=createLocalDemo(storage);
  await api('demo','POST',{role:'coach'});
- const e=target();e.reference1RM={exerciseId:'bench',value:250,unit:'lbs',type:'tested',date:new Date().toISOString().slice(0,10)};
+ const e=target();e.reference1RM={exerciseId:'bench',value:250,unit:'lbs',type:'tested',date:workoutDate({createdAt:new Date().toISOString()})};
  const p=await api('programs','POST',{name:'Adaptive persistence',goal:'Strength',weeks:1,description:'',sessions:[{name:'A',day:4,exercises:[e]}]});
- const a=await api('assign','POST',{programId:p.id,athleteId:'jordan',startDate:new Date().toISOString().slice(0,10)});
+ const a=await api('assign','POST',{programId:p.id,athleteId:'jordan',startDate:workoutDate({createdAt:new Date().toISOString()})});
  await api('demo','POST',{role:'athlete'});await api('log','POST',{assignmentId:a.id,week:1,session:0,readiness:3,pain:false,notes:'',exercises:[{exerciseId:'bench',sets:[{load:150,reps:5,rpe:8},{load:155,reps:5,rpe:8}]}]});
  api=createLocalDemo(storage);const data=await api('data'),log=data.logs.find(l=>l.assignmentId===a.id);assert.equal(log.exercises[0].sets[1].load,155);assert.equal(log.exercises[0].target.load,null);assert.equal(log.recommendations[0][0].status,'recommended');assert.equal(data.assignments.find(x=>x.id===a.id).plan[0].sessions[0].exercises[0].load,null);
 });

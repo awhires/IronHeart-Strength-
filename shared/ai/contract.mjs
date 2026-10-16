@@ -11,7 +11,7 @@ export const DAYS = Object.freeze(['Sunday','Monday','Tuesday','Wednesday','Thur
 export const TEMPO_DESCRIPTION = 'Eccentric - bottom pause - concentric - top pause. X means intentionally explosive concentric action.';
 export const TEMPO_PATTERN = '^\\d{1,2}-\\d{1,2}-(?:\\d{1,2}|X)-\\d{1,2}$';
 export const TEMPO_REGEX = new RegExp(TEMPO_PATTERN);
-export const EXERCISE_FIELDS = Object.freeze(['exerciseId','exerciseName','sets','reps','load','loadMode','loadUnit','percent1RM','reference1RM','effortMode','rpe','rir','rest','tempo','increment','notes','progressionInstructions']);
+export const EXERCISE_FIELDS = Object.freeze(['exerciseId','exerciseName','sets','reps','repMode','load','loadMode','loadUnit','percent1RM','reference1RM','effortMode','rpe','rir','rest','tempo','increment','notes','progressionInstructions']);
 
 const text = {type:'string',maxLength:2000};
 const nullableNumber = (minimum,maximum) => ({type:['number','null'],minimum,maximum});
@@ -21,13 +21,15 @@ const nullableId = {type:['string','null'],minLength:1,maxLength:200};
 export const REFERENCE_SCHEMA = object({exerciseId:{type:'string',minLength:1},value:{type:'number',exclusiveMinimum:0,maximum:1200},unit:enumOf(LOAD_UNIT),type:enumOf(REFERENCE_TYPE),date:{type:'string',format:'date'}});
 export const EXERCISE_SCHEMA = object({
   exerciseId:nullableId,exerciseName:{type:'string',minLength:1,maxLength:200},
-  sets:{type:'integer',minimum:1,maximum:12},reps:{type:'integer',minimum:1,maximum:50},
+  sets:{type:'integer',minimum:1,maximum:12},reps:{type:['integer','null'],minimum:1,maximum:50},repMode:{type:'string',enum:['fixed','max']},
   load:nullableNumber(0,1200),loadMode:enumOf(LOAD_MODE),loadUnit:enumOf(LOAD_UNIT),
   percent1RM:nullableNumber(1,100),reference1RM:{anyOf:[{type:'null'},REFERENCE_SCHEMA]},
   effortMode:enumOf(EFFORT_MODE),rpe:nullableNumber(1,10),rir:nullableNumber(0,10),
   rest:{type:'number',minimum:0,maximum:600},tempo:{type:['string','null'],pattern:TEMPO_PATTERN},
   increment:{type:'number',minimum:0.25,maximum:25},notes:text,progressionInstructions:text
 });
+// Legacy drafts omit repMode and remain fixed-rep prescriptions.
+EXERCISE_SCHEMA.required=EXERCISE_SCHEMA.required.filter(k=>k!=='repMode');
 export const SESSION_SCHEMA = object({name:{type:'string',minLength:1,maxLength:200},day:{type:'integer',minimum:0,maximum:6},maxDurationMinutes:nullableNumber(1,240),coachNotes:text,exercises:{type:'array',minItems:1,maxItems:15,items:EXERCISE_SCHEMA}});
 export const FINDING_SCHEMA = {...object({code:{type:'string'},severity:enumOf(SEVERITY),message:{type:'string'},path:{type:'string'},suggestedResolution:{type:'string'}}),required:['code','severity','message','path']};
 export const AI_DRAFT_SCHEMA = {

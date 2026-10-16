@@ -12,7 +12,7 @@ import {MetconSummary,MetconScoreEditor} from './WorkoutBlocks.jsx';
 export default function AssignedWorkout({modal,exercise,exercises,logs=[],busy,onSave,onVideo}){
  const original=modal.assignment.plan[modal.week-1].sessions[modal.session];
  const s={...original,exercises:original.exercises.map(e=>movementPrescription(e,exercise(e.exerciseId))||cardioPrescription(e,exercise(e.exerciseId))||e)};
- const [recommendations]=useState(()=>sessionRecommendations(modal.assignment,modal.week,modal.session,logs,exercises));
+ const [recommendations]=useState(()=>modal.assignment.recommendations?.[`${modal.week}:${modal.session}`]??sessionRecommendations(modal.assignment,modal.week,modal.session,logs,exercises));
  const [entries,setEntries]=useState(s.exercises.map((e,i)=>({exerciseId:e.exerciseId,sets:MOVEMENT_TYPES.includes(e.trackingType)?Array.from({length:e.sets},()=>({load:e.metrics?.load??null,loadUnit:e.metrics?.loadUnit||'lbs',distanceUnit:e.metrics?.distanceUnit||'m',durationSeconds:null})):e.trackingType&&e.trackingType!=='strength'?initialCardioActuals(e):prescribedSets(e).map((t,j)=>({load:recommendations[i]?.[j]?.load??initialActualLoad(t)??'',loadUnit:t.loadUnit,reps:'',rpe:''}))})));
  const [scores,setScores]=useState({}),[readiness,setReadiness]=useState(3),[pain,setPain]=useState(false);
  const edit=(i,j,patch)=>setEntries(old=>old.map((e,n)=>n===i?{...e,sets:e.sets.map((v,k)=>k===j?{...v,...patch}:v)}:e));

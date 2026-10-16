@@ -1,3 +1,4 @@
+import {workoutDate} from '../../shared/volume-stats.mjs';
 import {createRequire} from 'node:module';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,12 +27,28 @@ test('physical-phone state regressions: progression, adaptive actuals and AI rev
   const saved=(await(await page.request.get(base+'/api/data')).json()).programs.find(x=>x.id===p.id);assert.deepEqual(saved.plan[1].sessions[0].exercises[0].setBlocks.map(b=>b.load),[105,115]);assert.equal(saved.plan[1].sessions[0].exercises[1].adaptiveProgression.maxPercent,10);assert.equal(saved.plan[1].sessions[0].exercises[2].load,null);await context.close();
  });
  await t.test('athlete recommendation pre-fills actual weight, manual override persists without rewriting percentage',async()=>{
-  const {context,page}=await setup();const now=new Date(),date=now.toISOString().slice(0,10),day=now.getDay();
+  const {context,page}=await setup();const now=new Date(),date=workoutDate({createdAt:now.toISOString()}),day=now.getDay();
   const e={exerciseId:'bench',sets:2,reps:5,rest:120,load:null,loadMode:'percentage',percent1RM:75,rpe:8,reference1RM:{exerciseId:'bench',value:250,unit:'lbs',type:'tested',date},adaptiveProgression:{version:1,enabled:true,minPercent:5,maxPercent:10}};
   const p=await(await page.request.post(base+'/api/programs',{data:{name:'Adaptive phone test',goal:'Strength',weeks:1,description:'',sessions:[{name:'Adaptive athlete session',day,exercises:[e]}]}})).json();const a=await(await page.request.post(base+'/api/assign',{data:{programId:p.id,athleteId:'jordan',startDate:date}})).json();assert.ok(a.id);
   await page.request.post(base+'/api/demo',{data:{role:'athlete'}});await page.goto(base);await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(a.id);await page.locator('.training-session').filter({hasText:'Adaptive athlete session'}).getByRole('button').first().click();
   const dialog=page.getByRole('dialog');await dialog.getByText('Athlete recommendation',{exact:true}).waitFor();assert.equal(await page.getByLabel('Barbell Bench Press row 1 Load',{exact:true}).inputValue(),'185');await page.getByLabel('Barbell Bench Press row 1 Load',{exact:true}).fill('175');await page.getByLabel('Barbell Bench Press row 1 Reps',{exact:true}).fill('5');await page.getByLabel('Barbell Bench Press row 1 RPE (optional)',{exact:true}).fill('8');await dialog.getByRole('button',{name:'Complete workout',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.reload();
   const saved=(await(await page.request.get(base+'/api/data')).json()),log=saved.logs.find(l=>l.assignmentId===a.id);assert.equal(log.exercises[0].sets[0].load,175);assert.equal(log.exercises[0].target.percent1RM,75);assert.equal(log.exercises[0].target.load,null);assert.equal(log.recommendations[0][0].load,185);assert.equal(saved.assignments.find(x=>x.id===a.id).plan[0].sessions[0].exercises[0].load,null);await context.close();
+ });
+ await t.test('rolling Week 1 evidence reaches Week 2 API and mobile prefill; max-rep editor survives save',async()=>{
+  const {context,page}=await setup(),now=new Date(),date=workoutDate({createdAt:now.toISOString()});
+  const athlete=await(await page.request.post(base+'/api/athletes',{data:{name:'Rolling Athlete',email:'rolling@example.test',sport:'Strength'}})).json();assert.ok(athlete.id);
+  const e={exerciseId:'bench',sets:3,reps:8,load:100,rest:90,rpe:null,effortMode:'none'};
+  const p=await(await page.request.post(base+'/api/programs',{data:{name:'Rolling phone',goal:'Strength',weeks:3,description:'',progressionOptions:{method:'westside',rules:{'0:0:bench':{mode:'adaptive',minPercent:5,maxPercent:10}}},plan:[1,2,3].map(week=>({week,sessions:[{name:'Rolling session',day:now.getDay(),exercises:[e]}]}))}})).json();assert.ok(p.id);
+  await page.goto(base);await navigate(page,'Programs');await page.locator('.program-card').filter({hasText:'Rolling phone'}).getByRole('button',{name:/Edit/}).click();
+  await page.getByLabel('Exercise 1 row 1 Rep mode',{exact:true}).selectOption('max');assert.equal(await page.getByLabel('Exercise 1 row 1 Reps',{exact:true}).count(),0);
+  await page.getByRole('dialog').getByRole('button',{name:/Save program/}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+  const updated=(await(await page.request.get(base+'/api/data')).json()).programs.find(x=>x.id===p.id);assert.equal(updated.plan[0].sessions[0].exercises[0].repMode,'max');assert.equal(updated.plan[0].sessions[0].exercises[0].reps,null);
+  const a=await(await page.request.post(base+'/api/assign',{data:{programId:p.id,athleteId:athlete.id,startDate:date}})).json();assert.ok(a.id);
+  const redeemed=await page.request.post(base+'/api/redeem',{data:{code:athlete.code,password:'Temporary-test-only-123'}});assert.equal(redeemed.status(),200);
+  const result=await page.request.post(base+'/api/log',{data:{assignmentId:a.id,week:1,session:0,readiness:3,pain:false,notes:'',exercises:[{exerciseId:'bench',sets:[135,145,155].map(load=>({load,reps:8}))}]}});assert.equal(result.status(),200);
+  const data=await(await page.request.get(base+'/api/data')).json(),saved=data.assignments.find(x=>x.id===a.id),recommendation=saved.recommendations['2:0'][0][0];assert.equal(recommendation.status,'recommended');assert.equal(recommendation.baseline.load,155);assert.equal(recommendation.load,165);assert.equal(saved.plan[1].sessions[0].exercises[0].load,100);
+  await page.goto(base);await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(a.id);await page.getByRole('button',{name:'W2',exact:true}).click();await page.locator('.training-session').getByRole('button').first().click();
+  assert.equal(await page.getByLabel('Barbell Bench Press row 1 Load',{exact:true}).inputValue(),'165');await context.close();
  });
  const generate=async(page)=>{await page.goto(base);await navigate(page,'AI Program Builder');await page.getByLabel('Your coaching request',{exact:true}).fill('Create a six-week Jiu-Jitsu strength program.');await page.getByRole('button',{name:'Generate Draft',exact:true}).click();await page.getByRole('heading',{name:'AI Draft Review',exact:true}).waitFor();};
  await t.test('six-week request returning only Week 1 shows actionable error and cannot be approved',async()=>{
