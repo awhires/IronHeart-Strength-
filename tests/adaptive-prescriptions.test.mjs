@@ -30,7 +30,16 @@ test('uses actual 1/3/5RM assessment or journal sets without requiring Week 1; N
   const result=recommendAthleteLoad(target(),{...context,logs:[l]});assert.equal(result.status,'recommended');assert.equal(result.baseline.logId,'baseline');assert.ok(result.load>0);assert.equal(target().load,null);
  }
  const e=target();e.reference1RM={exerciseId:'bench',value:250,unit:'lbs',type:'tested',date:'2026-10-15'};
- const r=recommendAthleteLoad(e,{...context,logs:[]});assert.equal(r.load,200);assert.equal(r.baseline.source,'reference maximum');
+ const r=recommendAthleteLoad(e,{...context,logs:[]});assert.equal(r.load,195);assert.equal(r.baseline.source,'reference maximum');
+});
+test('Previous Performance ± follows exact-exercise actuals and athlete overrides, rounds pounds, and reports missing baseline',()=>{
+ const prev={exerciseId:'bench',sets:3,reps:10,load:null,loadMode:'previous_performance',loadDelta:-5,loadUnit:'lbs',effortMode:'none',rest:null};
+ const week1=logged();week1.exercises[0].sets=[{load:40,reps:8,rpe:null,loadUnit:'lbs'},{load:40,reps:8,rpe:null,loadUnit:'lbs'},{load:40,reps:8,rpe:null,loadUnit:'lbs'}];
+ const week2={...logged({id:'week2',workoutDate:'2026-10-15',createdAt:'2026-10-15T18:00:00Z'}),assignmentId:'a',week:2,session:0};week2.exercises[0].sets=Array.from({length:3},()=>({load:30,reps:10,rpe:null,loadUnit:'lbs'}));
+ assert.equal(recommendAthleteLoad(prev,{...context,assignmentId:'a',week:2,session:0,logs:[week1]}).load,35);
+ const next={...prev,sets:4,reps:6,loadDelta:15};const result=recommendAthleteLoad(next,{...context,assignmentId:'a',week:3,session:0,logs:[week1,week2]});assert.equal(result.status,'recommended');assert.equal(result.load,45);assert.equal(result.baseline.load,30);assert.equal(result.baseline.source,'actual workout performance');
+ const odd={...week2,createdAt:'2026-10-16T18:00:00Z'};odd.exercises[0].sets[2].load=148;const rounded=recommendAthleteLoad({...next,loadDelta:0},{...context,logs:[odd]});assert.equal(rounded.load,150);
+ assert.equal(recommendAthleteLoad(prev,{...context,logs:[logged({athleteId:'other'}),logged({id:'other-exercise',exercises:[{exerciseId:'squat',sets:[{load:500,reps:5,loadUnit:'lbs'}]}]})]}).status,'needs_previous_performance');
 });
 test('known low-effort work stays in history but does not establish strength estimates',()=>{
  const l=logged();l.exercises[0].sets[0].rpe=6;
@@ -46,8 +55,8 @@ test('new actuals refresh the baseline, one weekly step only, unit conversion an
  const first=logged(),second=logged({id:'second',workoutDate:'2026-10-15'});second.exercises[0].sets[0].load=220;
  const e={...target(),loadMode:'athlete_selected',percent1RM:null};
  assert.equal(recommendAthleteLoad(e,{...context,logs:[first]}).load,210);
- assert.equal(recommendAthleteLoad(e,{...context,logs:[first,second]}).load,235);
- assert.equal(recommendAthleteLoad(e,{...context,date:'2026-12-22',logs:[first,second]}).load,235);
+ assert.equal(recommendAthleteLoad(e,{...context,logs:[first,second]}).load,230);
+ assert.equal(recommendAthleteLoad(e,{...context,date:'2026-12-22',logs:[first,second]}).load,230);
  assert.equal(recommendAthleteLoad(e,{...context,date:'2026-10-15',logs:[first,second]}).load,220);
  const kg={...e,loadUnit:'kg',increment:2.5};const result=recommendAthleteLoad(kg,{...context,logs:[first]});assert.ok(result.load>=95&&result.load<=100);
  const small=logged();small.exercises[0].sets[0].load=10;assert.equal(recommendAthleteLoad(e,{...context,logs:[small]}).load,10);
@@ -74,5 +83,5 @@ test('upper bound needs two distinct successful sessions; grouped percentage row
  assert.equal(recommendAthleteLoad(e,{...context,logs:[logs[0],logs[0]]}).load,210);
  logs[1].exercises[0].sets[1].load=190;assert.equal(recommendAthleteLoad(e,{...context,logs}).load,210);
  const grouped={...target(),sets:3,reference1RM:{exerciseId:'bench',value:250,unit:'lbs',type:'tested',date:'2026-10-15'},setBlocks:[{sets:2,reps:5,percent1RM:75},{sets:1,reps:3,percent1RM:85}]};
- const a={id:'g',athleteId:'jordan',startDate:'2026-10-19',plan:[{week:1,sessions:[{day:4,exercises:[grouped]}]}]};assert.deepEqual(sessionRecommendations(a,1,0,[],exercises,'2026-10-15')[0].map(r=>r.load),[200,200,225]);
+ const a={id:'g',athleteId:'jordan',startDate:'2026-10-19',plan:[{week:1,sessions:[{day:4,exercises:[grouped]}]}]};assert.deepEqual(sessionRecommendations(a,1,0,[],exercises,'2026-10-15')[0].map(r=>r.load),[195,195,225]);
 });

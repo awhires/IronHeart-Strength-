@@ -23,7 +23,7 @@ test('explicit strength metadata and grouped rows support coach progression acro
  const grouped={...strength,setBlocks:[{sets:2,reps:5,load:200,rpe:8},{sets:1,reps:3,load:220,rpe:8}]},input=[{name:'Imported / manual / AI',exercises:[grouped]}];
  assert.equal(supportsCoachProgression(grouped),true);assert.equal(supportsLoadProgression(grouped),false);
  const plan=generateBlock(input,4,{method:'westside',roundTo:1,rules:{'0:0:bench':{mode:'repetition',increase:5}}});
- assert.deepEqual(plan[0].sessions,input);assert.deepEqual(plan[1].sessions[0].exercises[0].setBlocks.map(b=>b.load),[210,231]);assert.deepEqual(plan[1].sessions[0].exercises[0].setBlocks.map(b=>b.reps),[5,3]);
+ assert.deepEqual(plan[0].sessions,input);assert.deepEqual(plan[1].sessions[0].exercises[0].setBlocks.map(b=>b.load),[210,230]);assert.deepEqual(plan[1].sessions[0].exercises[0].setBlocks.map(b=>b.reps),[5,3]);
  assert.deepEqual(input[0].exercises[0],grouped);assert.equal(recommend(grouped,[]).action,'hold');
  assert.throws(()=>generateBlock(input,4,{method:'westside',rules:{'0:0:bench':{mode:'speed-bench',referenceMax:300}}}),/single prescription/);
 });

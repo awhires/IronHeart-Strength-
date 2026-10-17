@@ -9,20 +9,20 @@ import {createLocalDemo} from '../src/local-demo.mjs';
 const sets=[{reps:5,load:200,rpe:7,loadUnit:'lbs'},{reps:5,load:200,rpe:8,loadUnit:'lbs'}];
 const input={sessionName:'Independent strength',workoutDate:'2026-10-03',notes:'Felt good',exercises:[{exerciseId:'bench',sets},{exerciseId:'squat',sets:[{load:100,reps:8,loadUnit:'lbs',rpe:null}]}]};
 const log=(id,date,source='tracker',weight=200)=>({id,athleteId:'jordan',sessionName:id,workoutDate:date,createdAt:date+'T12:00:00Z',source,exercises:[{exerciseId:'bench',sets:sets.map(s=>({...s,load:weight}))}]});
-test('new pound prescriptions and rounding default to 5, kg remains 2.5, explicit older steps are preserved',()=>{
+test('automatic pound prescriptions round to 5, kg remains 2.5, and legacy increment metadata is preserved',()=>{
   assert.equal(newPrescription('bench').increment,5);
   const old={...newPrescription('bench'),increment:2.5};assert.equal(normalizePrescription(old).increment,2.5);assert.equal(old.increment,2.5);
   assert.equal(normalizePrescription({loadUnit:'kg'}).increment,2.5);
   const pct={percent1RM:51,referenceValue:200,referenceUnit:'lbs'};
-  assert.equal(calculatePercentageLoad(pct).rounded,100);assert.equal(calculatePercentageLoad({...pct,increment:2.5}).rounded,102.5);
+  assert.equal(calculatePercentageLoad(pct).rounded,100);assert.equal(calculatePercentageLoad({...pct,increment:2.5}).rounded,100);
   assert.equal(calculatePercentageLoad({...pct,referenceUnit:'kg',outputUnit:'kg'}).rounded,102.5);
   const base={exerciseId:'bench',load:100,sets:3,reps:5,rpe:7};
-  assert.equal(periodize(base,2).load,100);assert.equal(periodize({...base,increment:2.5},2).load,102.5);
+  assert.equal(periodize(base,2).load,100);assert.equal(periodize({...base,increment:2.5},2).load,100);
   assert.equal(generateBlock([{exercises:[base]}],4)[1].sessions[0].exercises[0].increment,5);
   assert.equal(generateWestsideBlock([{exercises:[base]}],3,{rules:{'0:0:bench':{mode:'speed-bench',referenceMax:203}}})[1].sessions[0].exercises[0].load,100);
   const legacy={...base,increment:2.5};
   assert.equal(generateBlock([{exercises:[legacy]}],4)[1].sessions[0].exercises[0].increment,2.5);
-  assert.equal(generateWestsideBlock([{exercises:[legacy]}],3,{rules:{'0:0:bench':{mode:'speed-bench',referenceMax:203}}})[1].sessions[0].exercises[0].load,102.5);
+  assert.equal(generateWestsideBlock([{exercises:[legacy]}],3,{rules:{'0:0:bench':{mode:'speed-bench',referenceMax:203}}})[1].sessions[0].exercises[0].load,100);
 });
 test('tracker validates manual sets without fabricated targets and rejects ownership/linkage injection',()=>{
   const out=prepareTrackerWorkout(input,exercises);assert.equal(out.source,'tracker');assert.equal(out.exercises.length,2);assert.equal(out.exercises[0].sets.length,2);assert.equal(out.exercises[0].target,undefined);assert.equal(out.assignmentId,undefined);

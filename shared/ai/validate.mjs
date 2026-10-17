@@ -98,16 +98,19 @@ export function validateDraft(draft,library=[],requirements={}){
           s.exercises.forEach((e,ei)=>{
             if(!record(e))return;
             const ep=`${sp}/exercises/${ei}`,known=library.find(x=>x.id===e.exerciseId);
-            if(!e.trackingType&&((e.repMode==='max'&&e.reps!==null)||(e.repMode!=='max'&&!Number.isInteger(e.reps))))add('INVALID_REPS',`${ep}/reps`,'Use numeric fixed reps or explicit Max Reps with null reps.');
+            if(!e.trackingType&&((e.repMode==='max'&&e.reps!==null)||(e.repMode!=='max'&&e.reps!==null&&!Number.isInteger(e.reps))))add('INVALID_REPS',`${ep}/reps`,'Use numeric fixed reps, intentionally unspecified reps, or explicit Max Reps with null reps.');
             if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,`“${e.exerciseName}” needs a library match (Week ${w.week}, ${s.name}).`,SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
             if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Review your equipment choice.`,SEVERITY.WARNING);
             if(e.trackingType){try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
             if(known&&CARDIO_TYPES.includes(trackingProfile(known)))add('CARDIO_REQUIRES_TYPED_PRESCRIPTION',ep,'Use a v2 cardio prescription with distance/time metrics, not strength sets/reps.');
-            if(e.loadMode===LOAD_MODE.FIXED&&(!number(e.load)||e.load<=0))add('MISSING_LOAD',`${ep}/load`,'Fixed loading needs a positive prescribed weight; blank is not zero.');
+            if(e.loadMode===LOAD_MODE.FIXED&&e.load!==null&&(!number(e.load)||e.load<=0))add('INVALID_LOAD',`${ep}/load`,'A fixed load must be positive or intentionally unspecified.');
             if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&e.load!==0)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Bodyweight cannot have a fixed external load.');
             if(e.loadMode===LOAD_MODE.ATHLETE_SELECTED&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Athlete-selected loading must leave the fixed load unspecified.');
+            if(e.loadMode===LOAD_MODE.NONE&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'An unspecified load must be null.');
+            if(e.loadMode===LOAD_MODE.PREVIOUS_PERFORMANCE&&(!number(e.loadDelta)||e.loadDelta < -200||e.loadDelta>200))add('INVALID_LOAD_DELTA',`${ep}/loadDelta`,'Previous Performance ± needs a change between −200 and +200.');
             if(e.loadMode!==LOAD_MODE.PERCENTAGE&&(e.percent1RM!==null||e.reference1RM!==null))add('CONFLICTING_LOAD_MODE',`${ep}/loadMode`,'Percentage and reference maximum require percentage loading.');
+            if(e.loadMode!==LOAD_MODE.PREVIOUS_PERFORMANCE&&e.loadDelta!=null)add('CONFLICTING_LOAD_MODE',`${ep}/loadDelta`,'Load change requires Previous Performance ±.');
             if(e.loadMode===LOAD_MODE.PERCENTAGE){
               if(!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100)add('INVALID_PERCENT_1RM',`${ep}/percent1RM`,'Enter a percentage greater than 0 and at most 100.');
               if(e.reference1RM===null)add('MISSING_REFERENCE_1RM',`${ep}/reference1RM`,'No reference maximum: keep the percentage target; an athlete-specific baseline or coach-entered maximum is needed to suggest weight.',SEVERITY.WARNING,'Enter the matching lift, maximum, unit, source type, and date.');
@@ -118,8 +121,8 @@ export function validateDraft(draft,library=[],requirements={}){
               if(e.load!==null&&(calculated===null||Math.abs(e.load-calculated)>0.0001))add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Entered weight does not match the validated percentage calculation. Clear it or correct the prescription.');
             }
             if(number(e.load)&&inPounds(e.load,e.loadUnit)>1200)add('LOAD_LIMIT',`${ep}/load`,'This load exceeds the existing 1200 lb application limit.');
-            if(e.effortMode===EFFORT_MODE.RPE&&(!number(e.rpe)||e.rpe<1||e.rpe>10))add('INVALID_RPE',`${ep}/rpe`,'RPE requires a target from 1 to 10.');
-            if(e.effortMode===EFFORT_MODE.RIR&&(!number(e.rir)||e.rir<0||e.rir>10))add('INVALID_RIR',`${ep}/rir`,'RIR requires a target from 0 to 10.');
+            if(e.effortMode===EFFORT_MODE.RPE&&e.rpe!=null&&(!number(e.rpe)||e.rpe<1||e.rpe>10))add('INVALID_RPE',`${ep}/rpe`,'RPE must be 1–10 when supplied.');
+            if(e.effortMode===EFFORT_MODE.RIR&&e.rir!=null&&(!number(e.rir)||e.rir<0||e.rir>10))add('INVALID_RIR',`${ep}/rir`,'RIR must be 0–10 when supplied.');
             if((e.effortMode!==EFFORT_MODE.RPE&&e.rpe!==null)||(e.effortMode!==EFFORT_MODE.RIR&&e.rir!==null))add('CONFLICTING_EFFORT_MODE',`${ep}/effortMode`,'Keep only the target selected by the effort mode. No target is required for standard sets/reps.');
             if(e.tempo!==null&&(typeof e.tempo!=='string'||!TEMPO_REGEX.test(e.tempo)))add('INVALID_TEMPO',`${ep}/tempo`,'Tempo must be four parts such as 3-1-X-0; X is allowed only in the concentric position.');
             if(requirements.primaryExerciseIds?.includes(e.exerciseId)&&e.effortMode!==EFFORT_MODE.RPE)add('PRIMARY_LIFT_EFFORT',`${ep}/effortMode`,'The request specifies RPE for this primary lift.',SEVERITY.WARNING);

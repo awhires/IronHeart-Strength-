@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {exercises} from '../server/seed.mjs';
 import {normalizePrescription,validatePrescription,calculatePercentageLoad,suggestedLoad,loadText,prescriptionText,prepareProgram,recordPerformance,normalizeData} from '../shared/prescriptions.mjs';
+import {roundAutomaticLoad} from '../shared/ai/contract.mjs';
 import {createFixture,FIXTURE_REQUIREMENTS} from '../shared/ai/fixtures.mjs';
+import {validateDraft} from '../shared/ai/validate.mjs';
 import {createReview,approveReview,editReview} from '../shared/ai/draft-state.mjs';
 import {createDraftSaveService} from '../shared/ai/save-service.mjs';
 import {periodize,recommend,generateBlock,generateWestsideBlock} from '../server/progression.mjs';
@@ -19,13 +21,18 @@ test('all loading modes validate and format without inferring bodyweight',()=>{
     const e={...base(),loadMode:mode,load:null};assert.equal(errors(e).length,0);assert.equal(loadText(e),expected);
     assert.ok(errors({...e,load:25}).length);
   }
-  assert.ok(errors({...base(),load:null}).length);
+  assert.equal(errors({...base(),load:null}).length,0);
 });
 test('percentage utility preserves raw and rounded calculations with unit conversion',()=>{
   assert.deepEqual(calculatePercentageLoad({percent1RM:75,referenceValue:225,referenceUnit:'lbs',increment:5}),{raw:168.75,rounded:170,unit:'lbs'});
   assert.equal(calculatePercentageLoad({percent1RM:75,referenceValue:100,referenceUnit:'kg',outputUnit:'lbs',increment:5}).rounded,165);
   assert.equal(calculatePercentageLoad({percent1RM:75,referenceValue:100,referenceUnit:'kg',outputUnit:'kg',increment:2.5}).rounded,75);
   for(const bad of [{referenceValue:null},{referenceUnit:'stone'},{percent1RM:0},{increment:0}])assert.equal(calculatePercentageLoad({percent1RM:75,referenceValue:225,referenceUnit:'lbs',...bad}),null);
+});
+test('all automatic pound calculations use the shared 5 lb rounding rule while kg keeps its increment',()=>{
+ for(const [value,expected] of [[147,145],[148,150],[182,180],[183,185]])assert.equal(roundAutomaticLoad(value,'lbs'),expected);
+ assert.equal(roundAutomaticLoad(73,'kg',2.5),72.5);assert.equal(roundAutomaticLoad(74,'kg',2.5),75);
+ assert.equal(calculatePercentageLoad({percent1RM:74,referenceValue:200,referenceUnit:'lbs',outputUnit:'lbs',increment:1}).rounded,150);
 });
 test('live percentage without usable maximum is a warning, never a fabricated weight',()=>{
   const e={...base(),loadMode:'percentage',load:null,percent1RM:75};
@@ -39,7 +46,23 @@ test('effort none, RPE and RIR stay distinct and tempo remains optional',()=>{
   for(const e of [base(),{...base(),effortMode:'none',rpe:null},{...base(),effortMode:'rir',rpe:null,rir:2,tempo:'3-1-X-0'}])assert.equal(errors(e).length,0);
   const rir={...base(),effortMode:'rir',rpe:null,rir:2,tempo:'3-1-X-0'};
   assert.match(prescriptionText(rir),/RIR 2.*Tempo: 3-1-X-0/);assert.doesNotMatch(prescriptionText(rir),/RPE/);
-  for(const patch of [{effortMode:'rpe',rpe:null},{effortMode:'rir',rpe:null,rir:11},{effortMode:'none'},{tempo:'3-X-0-0'}])assert.ok(errors({...base(),...patch}).length);
+  assert.equal(errors({...base(),effortMode:'rpe',rpe:null}).length,0);
+  for(const patch of [{effortMode:'rir',rpe:null,rir:11},{effortMode:'none'},{tempo:'3-X-0-0'}])assert.ok(errors({...base(),...patch}).length);
+});
+test('optional prescriptions save; unspecified reps stay distinct from Max Reps and actual reps are recorded',()=>{
+ const library=exercises,program=prepareProgram({name:'Open prescription',goal:'Strength',weeks:1,description:'',sessions:[{name:'Open day',day:1,exercises:[{exerciseId:'bench',sets:null,reps:null,repMode:'fixed',load:null,loadMode:'none',loadUnit:'lbs',effortMode:'none',rpe:null,rir:null,rest:null,tempo:null,increment:5,notes:'',progressionInstructions:''}]}]},library);
+ const target=program.sessions[0].exercises[0];assert.equal(target.sets,null);assert.equal(target.reps,null);assert.equal(target.repMode,'fixed');assert.match(prescriptionText(target),/Sets not prescribed/);
+ const actual=recordPerformance([{exerciseId:'bench',sets:[12,10,8].map(reps=>({load:100,loadUnit:'lbs',reps,rpe:null}))}],[target],library);assert.deepEqual(actual[0].sets.map(s=>s.reps),[12,10,8]);
+ const max={...target,sets:3,reps:null,repMode:'max',load:100,loadMode:'fixed'};assert.match(prescriptionText(max),/3 × Max Reps/);assert.doesNotMatch(prescriptionText(max),/reps open/);assert.equal(errors(max).length,0);
+ const noReps={...target,sets:3,load:100,loadMode:'fixed'};assert.equal(errors(noReps).length,0);assert.match(prescriptionText(noReps),/3 × reps open/);
+});
+test('AI review accepts open prescriptions and the explicit previous-performance delta mode',()=>{
+ const draft=createFixture(),exercise=draft.program.plan[0].sessions[0].exercises[0];
+ Object.assign(exercise,{sets:null,reps:null,repMode:'fixed',load:null,loadMode:'none',loadDelta:null,effortMode:'rpe',rpe:null,rir:null,rest:null,tempo:null});
+ assert.equal(validateDraft(draft,exercises).canApprove,true);
+ exercise.loadMode='previous_performance';exercise.loadDelta=-5;
+ assert.equal(validateDraft(draft,exercises).canApprove,true);
+ exercise.loadDelta=null;assert.ok(validateDraft(draft,exercises).findings.some(f=>f.code==='INVALID_LOAD_DELTA'));
 });
 test('actual performance is independent and snapshots contain the original full prescription',()=>{
   const e={...base(),loadMode:'athlete_selected',load:null,effortMode:'rir',rpe:null,rir:2,tempo:'3-1-X-0',loadUnit:'kg'};

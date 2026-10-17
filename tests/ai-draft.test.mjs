@@ -24,9 +24,9 @@ test('AI unknown ID and unresolved name stay in the draft without library creati
   assert.ok(codes(d).includes('UNKNOWN_EXERCISE'));assert.equal(first(d).exerciseName,'Unknown lift');assert.deepEqual(exercises,library);
   first(d).exerciseId='invented-id';assert.ok(codes(d).includes('UNKNOWN_EXERCISE'));
 });
-test('AI fixed load must be known; blank never becomes zero',()=>{
+test('AI fixed load may be intentionally open; blank never becomes zero',()=>{
   const d=createFixture();first(d).loadMode=LOAD_MODE.FIXED;
-  assert.ok(codes(d).includes('MISSING_LOAD'));assert.equal(parseOptionalNumber(''),null);assert.equal(parseOptionalNumber('  '),null);assert.equal(parseOptionalNumber('0'),0);
+  assert.equal(validate(d).canApprove,true);assert.equal(parseOptionalNumber(''),null);assert.equal(parseOptionalNumber('  '),null);assert.equal(parseOptionalNumber('0'),0);
   first(d).load='';assert.equal(validate(d).canApprove,false);
   first(d).load=135;assert.equal(validate(d).canApprove,true);
 });
@@ -57,8 +57,8 @@ test('AI valid RPE, RIR and no-effort targets retain their separate meanings',()
   const output=toIronHeartProgram(approved(d),exercises,requirements);assert.equal(output.plan[0].sessions[0].exercises[0].rpe,null);assert.equal(output.plan[0].sessions[0].exercises[0].rir,2);
   e.effortMode=EFFORT_MODE.NONE;e.rir=null;assert.equal(validate(d).counts.error,0);
 });
-for(const [name,key,mode,value,code] of [['RPE','rpe',EFFORT_MODE.RPE,11,'INVALID_RPE'],['RIR','rir',EFFORT_MODE.RIR,-1,'INVALID_RIR']])test(`AI rejects invalid ${name} and null target`,()=>{
-  const d=createFixture(),e=first(d);e.rpe=null;e.rir=null;e.effortMode=mode;e[key]=value;assert.ok(codes(d).includes(code));e[key]=null;assert.ok(codes(d).includes(code));
+for(const [name,key,mode,value,code] of [['RPE','rpe',EFFORT_MODE.RPE,11,'INVALID_RPE'],['RIR','rir',EFFORT_MODE.RIR,-1,'INVALID_RIR']])test(`AI rejects invalid ${name} but permits an omitted target`,()=>{
+  const d=createFixture(),e=first(d);e.rpe=null;e.rir=null;e.effortMode=mode;e[key]=value;assert.ok(codes(d).includes(code));e[key]=null;assert.equal(codes(d).includes(code),false);
 });
 test('AI tempo validation accepts normalized four parts and rejects invalid explosive positions',()=>{
   const d=createFixture(),e=first(d);
@@ -126,5 +126,5 @@ test('AI invalid percentage inputs block calculation and error drafts cannot be 
   const a=approved(createFixture());
   assert.equal(isApproved(a,exercises.filter(e=>e.id!=='bench'),requirements),false);
   const rounded=createFixture('percentage');Object.assign(first(rounded),{percent1RM:100,increment:22});first(rounded).reference1RM.value=1200;
-  assert.ok(codes(rounded).includes('LOAD_LIMIT'));assert.throws(()=>approved(rounded));
+  assert.equal(percentageLoad(first(rounded),exercises),1200);assert.equal(validate(rounded).canApprove,true);
 });
