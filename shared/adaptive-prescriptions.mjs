@@ -27,7 +27,7 @@ export function recommendAthleteLoad(item,{athleteId,logs=[],library=[],assignme
  candidates.sort((a,b)=>b.oneRM-a.oneRM||b.date.localeCompare(a.date));
  if(e.repMode==='max')return unavailable('Max-rep target: keep the coach load and record actual reps; no fixed rep target to translate.');
  const baseline=candidates.find(c=>e.loadMode==='percentage'?c.oneRM!=null:NSCA_PERCENT[e.reps]&&c.oneRM!=null);
- if(!baseline)return unavailable('Log a recent comparable set or enter a dated reference maximum; Week 1 is not required.');
+ if(!baseline)return unavailable(recent.length?'Not enough qualifying performance data (for example, recent RPE 8–10 sets).':'Needs baseline data: log a comparable set or enter a dated reference maximum.');
  const rawLb=e.loadMode==='percentage'?baseline.oneRM*e.percent1RM/100:baseline.reps===e.reps?baseline.load:baseline.oneRM*NSCA_PERCENT[e.reps]*.9;
  if(!Number.isFinite(rawLb)||rawLb<=0)return unavailable('A valid load baseline is needed.');
  const base=convertWeight(rawLb,'lbs',e.loadUnit),increment=e.increment;

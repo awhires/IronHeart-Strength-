@@ -51,7 +51,7 @@ async function exercisePipeline(api){
   const aiAssignment=await api('assign','POST',{programId:saved.id,athleteId:'jordan',startDate:'2026-10-05'});assert.deepEqual(aiAssignment.plan,exactPlan);
   assert.deepEqual((await api('data')).programs.find(p=>p.id===source.id),source);
   const edited=structuredClone(saved);edited.plan[1].sessions[0].exercises[0].sets=4;
-  const resaved=await api('programs','POST',edited);assert.equal(resaved.plan[1].sessions[0].exercises[0].sets,4);assert.deepEqual((await api('data')).assignments.find(a=>a.id===aiAssignment.id).plan,exactPlan);
+  const resaved=await api('programs','POST',edited);assert.equal(resaved.plan[1].sessions[0].exercises[0].sets,4);const updatedAssignment=(await api('data')).assignments.find(a=>a.id===aiAssignment.id);assert.equal(updatedAssignment.plan[1].sessions[0].exercises[0].sets,4);assert.equal(updatedAssignment.plan[1].sessions[0].prescriptionRevision,1);assert.deepEqual(updatedAssignment.plan[0],exactPlan[0]);
 }
 
 test('phone rich prescription persistence, assignments, history and approved AI save pipeline',async()=>{

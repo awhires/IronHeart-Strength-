@@ -1,4 +1,5 @@
 import {sessionRecommendations,withAthleteRecommendations} from '../shared/adaptive-prescriptions.mjs';
+import {propagateProgram} from '../shared/program-sync.mjs';
 import {prepareStrengthGoal} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,weekdayDate} from '../shared/program-schedule.mjs';
 import {missingConditioningExercises,missingSingleUnders} from '../shared/conditioning-library.mjs';
@@ -76,7 +77,13 @@ export function createLocalDemo(storage){
         coach();if(!b.name?.trim())throw Error('Enter a name.');
         const prepared=route==='programs'?prepareProgram(b,state.exercises):b;
         if(b.id&&!state[route].some(x=>x.id===b.id))throw Error('Record not found.');
+        const previous=b.id&&route==='programs'?state.programs.find(p=>p.id===b.id):null;
         result=save(route,{...prepared,id:b.id||id()});
+        if(previous)for(const a of state.assignments.filter(a=>a.programId===result.id)){
+          const oldPlan=assignment(previous,a.athleteId,a.startDate).plan,newPlan=assignment(result,a.athleteId,a.startDate).plan;
+          const synced=propagateProgram(a,oldPlan,newPlan,state.logs,previous.progressionOptions,result.progressionOptions);
+          Object.assign(a,synced.assignment,{progressionOptions:clone(result.progressionOptions)});
+        }
       }else if(route==='athletes'&&method==='POST'){
         coach();if(!b.name?.trim()||!b.email?.trim())throw Error('Enter an athlete name and email.');
         if(state.athletes.some(a=>a.email.toLowerCase()===b.email.toLowerCase()))throw Error('This athlete email already exists.');
@@ -87,7 +94,7 @@ export function createLocalDemo(storage){
         const a={...assignment(p,b.athleteId,b.startDate),description:p.description,modality:p.modality,level:p.level};if(b.requireSetup===true||b.requireSetup==='on')a.enrollment={source:'coach',status:'pending'};result=save('assignments',a);
       }else if(['assignment','reschedule','session-status'].includes(route)){
         coach();const {a,s}=session();
-        if(route==='assignment'){Object.assign(s,prepareSession({...s,exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},state.exercises));}
+        if(route==='assignment'){Object.assign(s,prepareSession({...s,exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},state.exercises));s.prescriptionRevision=(s.prescriptionRevision||0)+1;}
         if(route==='reschedule'){if(!Number.isInteger(b.day)||b.day<0||b.day>6)throw Error('Choose a weekday.');if(a.schedule)Object.assign(a,moveWorkout(a,{week:b.week,session:b.session,targetDate:weekdayDate(a,b.week,b.session,b.day)},state.logs));else s.day=b.day;}
         if(route==='session-status')s.cancelled=!!b.cancelled;
         result=a;
@@ -99,6 +106,7 @@ export function createLocalDemo(storage){
         if(user.role!=='athlete')throw Error('Open Athlete view to log a workout.');
         const {a,s}=session();if(a.enrollment?.status==='pending')throw Error('Confirm your program schedule before logging.');if(s.cancelled)throw Error('This session is removed from the calendar.');
         if(state.logs.some(l=>l.assignmentId===a.id&&l.week===b.week&&l.session===b.session))throw Error('This workout is already logged. Delete its log to redo it.');
+        if(b.prescriptionRevision!==undefined&&b.prescriptionRevision!==(s.prescriptionRevision||0))throw Error('Coach updated this workout while it was open. Your entered results remain on this screen.');
         if(!b.exercises||b.exercises.length!==s.exercises.length)throw Error('Complete every exercise.');
         const recorded=recordPerformance(b.exercises,s.exercises,state.exercises);
         const blockResults=recordBlockScores(b.blockResults,s.blocks);

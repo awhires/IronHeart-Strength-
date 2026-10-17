@@ -1,4 +1,4 @@
-import {metconKey,performanceMovementKey} from './workout-blocks.mjs';
+import {metconKey,performanceMovementKey,metconScoreMode} from './workout-blocks.mjs';
 import {convertWeight} from './ai/contract.mjs';
 import {workoutDate} from './volume-stats.mjs';
 export function metconPerformances(logs,athleteId){return logs.filter(l=>l.athleteId===athleteId).flatMap(l=>(l.blockResults||[]).map((r,i)=>({...r,id:l.id,index:i,date:workoutDate(l),key:metconKey(r.metcon)}))).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||String(a.id).localeCompare(String(b.id)));}
@@ -8,7 +8,15 @@ export function metconStats(logs,athleteId,key,rx='RX'){
  // Scaled descriptions and actual loads must match before comparing results.
  const sessions=latest?all.filter(r=>(rx==='RX'||(r.score.performedMovements&&latest.score.performedMovements?performanceMovementKey(r.score.performedMovements,r.metcon.repScheme)===performanceMovementKey(latest.score.performedMovements,latest.metcon.repScheme):!r.score.performedMovements&&!latest.score.performedMovements&&r.score.notes===latest.score.notes))&&(type==='Load'||(r.score.load==null?null:convertWeight(r.score.load,r.score.loadUnit,'lbs'))===(latest.score.load==null?null:convertWeight(latest.score.load,latest.score.loadUnit,'lbs')))):[];
  const lower=['For Time','Rounds for Time','Time Cap','Chipper'].includes(type);
- const value=r=>lower?(r.score.completed===false?null:r.score.timeSeconds??null):type==='Load'?convertWeight(r.score.load,r.score.loadUnit,'lbs'):['EMOM','Intervals'].includes(type)?r.score.successfulMinutes:r.score.rounds*100000+r.score.reps;
+ const value=r=>{
+  if(lower)return r.score.completed===false?null:r.score.timeSeconds??null;
+  if(type==='Load')return convertWeight(r.score.load,r.score.loadUnit,'lbs');
+  if(type==='Intervals')return r.score.successfulMinutes??null;
+  const mode=metconScoreMode(r.metcon);
+  if(type==='EMOM')return mode==='completed_minutes'?r.score.successfulMinutes??null:mode==='completed_intervals'?r.score.successfulIntervals??null:mode==='total_reps'?r.score.totalReps??null:mode==='completion'?r.score.completed===true?1:r.score.completed===false?0:null:mode==='per_interval'?r.score.intervalResults?.filter(v=>v.completed).length??null:null;
+  if(type==='AMRAP')return mode==='total_reps'?r.score.totalReps??null:mode==='rounds'?r.score.rounds??null:Number.isInteger(r.score.rounds)&&Number.isInteger(r.score.reps)?r.score.rounds*100000+r.score.reps:null;
+  return Number.isInteger(r.score.rounds)&&Number.isInteger(r.score.reps)?r.score.rounds*100000+r.score.reps:null;
+ };
  const valid=sessions.filter(r=>Number.isFinite(value(r))),previous=valid.at(-2)||null,best=valid.reduce((a,r)=>!a||(lower?value(r)<value(a):value(r)>value(a))?r:a,null);
  const improvement=latest&&previous&&value(latest)!=null?(value(latest)-value(previous))*(lower?-1:1):null;
  return {sessions,latest,previous,best,improvement,status:improvement==null?'Not enough comparable data':improvement>0?'Improving':improvement<0?'Declining':'Maintaining',points:valid.map(r=>({...r,value:value(r)}))};
