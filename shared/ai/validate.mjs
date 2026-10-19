@@ -69,6 +69,14 @@ export function validateDraftStructure(draft){
   const findings=[];shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',(code,path,message)=>findings.push({code,path,message,severity:SEVERITY.ERROR}));return findings;
 }
 export function validateDraft(draft,library=[],requirements={}){
+  // Optional coach targets may be omitted by a provider; normalize only an
+  // in-memory validation copy so blanks stay null and never become zero.
+  draft=structuredClone(draft);
+  const plan=Array.isArray(draft?.program?.plan)?draft.program.plan:[];
+  for(const w of plan)for(const s of (Array.isArray(w?.sessions)?w.sessions:[]))for(const e of (Array.isArray(s?.exercises)?s.exercises:[]))if(record(e)&&!e.trackingType){
+    for(const key of ['sets','reps','load','loadDelta','percent1RM','reference1RM','referenceLoad','rpe','rir','rest','tempo'])if(!Object.hasOwn(e,key))e[key]=null;
+    e.repMode??='fixed';e.loadMode??=LOAD_MODE.ATHLETE_SELECTED;e.loadUnit??=LOAD_UNIT.LBS;e.effortMode??=EFFORT_MODE.NONE;e.increment??=5;e.notes??='';e.progressionInstructions??='';
+  }
   const findings=[];
   const add=(code,path,message,severity=SEVERITY.ERROR,suggestedResolution)=>findings.push({code,severity,message,path,...(suggestedResolution?{suggestedResolution}:{})});
   shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',add);
@@ -107,6 +115,7 @@ export function validateDraft(draft,library=[],requirements={}){
             if(e.loadMode===LOAD_MODE.FIXED&&e.load!==null&&(!number(e.load)||e.load<=0))add('INVALID_LOAD',`${ep}/load`,'A fixed load must be positive or intentionally unspecified.');
             if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&e.load!==0)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Bodyweight cannot have a fixed external load.');
             if(e.loadMode===LOAD_MODE.ATHLETE_SELECTED&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Athlete-selected loading must leave the fixed load unspecified.');
+            if(e.referenceLoad!=null){const ref=e.referenceLoad,reference=library.find(x=>x.id===ref?.exerciseId);if(known?.name!=='Speed Bench'||reference?.name!=='Bench Press'||ref.exerciseName!=='Bench Press'||![55,60,65].includes(ref.percent)||e.loadMode!==LOAD_MODE.ATHLETE_SELECTED)add('INVALID_SPEED_BENCH_REFERENCE',`${ep}/referenceLoad`,'Speed Bench may use only 55%, 60% or 65% of the Bench Press 1RM; keep actual load athlete-selected.');}
             if(e.loadMode===LOAD_MODE.NONE&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'An unspecified load must be null.');
             if(e.loadMode===LOAD_MODE.PREVIOUS_PERFORMANCE&&(!number(e.loadDelta)||e.loadDelta < -200||e.loadDelta>200))add('INVALID_LOAD_DELTA',`${ep}/loadDelta`,'Previous Performance ± needs a change between −200 and +200.');
             if(e.loadMode!==LOAD_MODE.PERCENTAGE&&(e.percent1RM!==null||e.reference1RM!==null))add('CONFLICTING_LOAD_MODE',`${ep}/loadMode`,'Percentage and reference maximum require percentage loading.');

@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 
 // Keep human input (including blank and partial numbers) out of domain state.
 // Native validity blocks submission while an unfinished/invalid draft is visible.
-export default function NumericInput({value,onChange,commitOnBlur=false,...props}){
+export default function NumericInput({value,onChange,commitOnBlur=false,emptyDraftInvalid=false,...props}){
  const [draft,setDraft]=useState(value??''),focused=useRef(false);
  useEffect(()=>{if(!focused.current)setDraft(value??'');},[value]);
  function commit(input){
@@ -14,7 +14,7 @@ export default function NumericInput({value,onChange,commitOnBlur=false,...props
   try{onChange(next);}catch(error){input.setCustomValidity(error.message||'Check this value.');}
  }
  return <input {...props} type="number" value={draft} onFocus={()=>{focused.current=true;}}
-  onChange={e=>{setDraft(e.target.value);e.target.setCustomValidity('');if(!commitOnBlur)commit(e.target);}}
+  onChange={e=>{setDraft(e.target.value);e.target.setCustomValidity(emptyDraftInvalid&&e.target.value===''?'Finish editing this value.':'');if(!commitOnBlur)commit(e.target);}}
   onKeyDown={e=>{if(e.key==='Enter')commit(e.currentTarget);}}
   onBlur={e=>{focused.current=false;commit(e.target);}}/>;
 }

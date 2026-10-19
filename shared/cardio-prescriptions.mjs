@@ -25,7 +25,6 @@ export function validateCardioPrescription(item,library){
  if(!Number.isFinite(item.restSeconds??0)||(item.restSeconds??0)<0||(item.restSeconds??0)>3600)throw Error('Use recovery rest up to 60 minutes.');
  if(typeof(item.notes??'')!=='string'||(item.notes||'').length>2000)throw Error('Check cardio notes.');
  const metrics=item.metrics;if(!metrics||typeof metrics!=='object'||Array.isArray(metrics))throw Error('Enter cardio targets.');
- if(!item.intervals?.length&&!(metrics.distance>0||metrics.durationSeconds>0))throw Error('Enter a distance or duration target.');
  for(const [k,v] of Object.entries(metrics)){
   if(k==='distanceUnit'){convertDistance(1,v,'m');continue;}if(k==='paceUnit'){if(item.trackingType!=='running'||!['mi','km'].includes(v))throw Error('Running pace uses mi or km.');continue;}
   if(![...FIELDS[item.trackingType],'rpe'].includes(k)||v!=null&&(typeof v!=='number'||!Number.isFinite(v)||v<0||v>(k==='distance'?1000000:k==='rpe'?10:86400)))throw Error(`Check cardio ${k}.`);
@@ -34,17 +33,17 @@ export function validateCardioPrescription(item,library){
  if(metrics.distance!=null)convertDistance(metrics.distance,metrics.distanceUnit||(['erg','swimming'].includes(item.trackingType)?'m':'mi'),'m');
  if(item.intervals!=null){
   validateIntervalShape(item.intervals);
-  let total=0;for(const b of item.intervals){if(!Number.isInteger(b.rounds)||b.rounds<1||b.rounds>30)throw Error('Check prescribed interval rounds.');total+=b.rounds*intervalSegments(b).length;
-   for(const {metrics:work} of intervalSegments(b))validateCardioPrescription({exerciseId:item.exerciseId,trackingType:item.trackingType,intervalCount:1,metrics:work,restSeconds:0},library);
+  let total=0;for(const b of item.intervals){if(b.rounds!=null&&(!Number.isInteger(b.rounds)||b.rounds<1||b.rounds>30))throw Error('Check prescribed interval rounds.');total+=(b.rounds??1)*intervalSegments(b).length;
+   for(const {metrics:work} of intervalSegments(b))validateCardioPrescription({exerciseId:item.exerciseId,trackingType:item.trackingType,intervalCount:1,metrics:work||{},restSeconds:0},library);
    const recovery=b.recovery||{};if(recovery.durationSeconds!=null&&(!Number.isFinite(recovery.durationSeconds)||recovery.durationSeconds<0||recovery.durationSeconds>3600))throw Error('Check prescribed recovery.');
    if(typeof recovery!=='object'||Array.isArray(recovery))throw Error('Check prescribed recovery.');
-   validateCardioPrescription({exerciseId:item.exerciseId,trackingType:item.trackingType,metrics:{durationSeconds:1,...recovery},restSeconds:0,intervalCount:1,...(!(recovery.distance>0||recovery.durationSeconds>0)?{metrics:{...recovery,durationSeconds:1}}:{})},library);
+   validateCardioPrescription({exerciseId:item.exerciseId,trackingType:item.trackingType,metrics:recovery||{},restSeconds:0,intervalCount:1},library);
   }if(total!==(item.intervalCount??1))throw Error('Prescribed interval count does not match blocks.');
  }
  return {...structuredClone(item),intervalCount:item.intervalCount??1,restSeconds:item.restSeconds??0};
 }
 export function cardioTargetText(item){
- if(item.intervals?.some(b=>b.segments))return item.intervals.map(b=>`${b.rounds} rounds · ${intervalSegments(b).map(s=>`${s.label||'Work'}: ${cardioTargetText({...item,intervals:undefined,intervalCount:1,restSeconds:0,metrics:s.metrics})}`).join(' → ')}${b.recovery?.durationSeconds?` · ${formatTime(b.recovery.durationSeconds)} between rounds`:''}`).join(' / ');
+ if(item.intervals?.some(b=>b.segments))return item.intervals.map(b=>`${b.rounds==null?'':`${b.rounds} rounds · `}${intervalSegments(b).map(s=>`${s.label||'Work'}: ${cardioTargetText({...item,intervals:undefined,intervalCount:1,restSeconds:0,metrics:s.metrics})}`).join(' → ')}${b.recovery?.durationSeconds?` · ${formatTime(b.recovery.durationSeconds)} between rounds`:''}`).join(' / ');
  const m=item.metrics||{},type=item.trackingType,unit=m.distanceUnit||(['erg','swimming'].includes(type)?'m':'mi');
  const pace=m.paceSeconds!=null?`${formatTime(m.paceSeconds)} / ${type==='erg'?'500 m':type==='swimming'?`100 ${unit==='yd'?'yd':'m'}`:m.paceUnit||unit}`:'';
  return [item.intervalCount>1?`${item.intervalCount} intervals ×`:null,m.distance!=null?`${m.distance} ${unit}`:null,m.durationSeconds!=null?formatTime(m.durationSeconds):null,pace?`@ ${pace}`:null,item.restSeconds?`${formatTime(item.restSeconds)} recovery`:null,m.rpe!=null?`RPE ${m.rpe}`:null].filter(Boolean).join(' · ')||'Cardio targets need coach review';

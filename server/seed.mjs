@@ -1,7 +1,7 @@
 import {additionalExercises} from '../shared/exercise-library.mjs';
 export const exercises = [
   ['squat','Barbell Back Squat','Lower body','Barbell','Squat','Keep your whole foot grounded. Brace before descending; drive up with control.','bEv6CCg2BC8'],
-  ['bench','Barbell Bench Press','Upper body','Barbell','Push','Set your shoulder blades. Lower with control and keep your feet planted.','rT7DgCr-3pg'],
+  ['bench','Bench Press','Upper body','Barbell','Push','Set your shoulder blades. Lower with control and keep your feet planted.','rT7DgCr-3pg'],
   ['deadlift','Conventional Deadlift','Lower body','Barbell','Hinge','Brace, keep the bar close, and push the floor away. Reset each rep.','op9kVnSso6Q'],
   ['rdl','Romanian Deadlift','Lower body','Barbell','Hinge','Soften your knees, move your hips back, and keep a neutral spine.','JCXUYuzwNrM'],
   ['row','Bent-over Barbell Row','Upper body','Barbell','Pull','Hinge and brace. Pull toward your lower ribs without swinging.','vT2GjY_Umpw'],

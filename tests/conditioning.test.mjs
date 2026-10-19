@@ -53,8 +53,8 @@ test('For Time named and custom metcons preserve scheme, loads and cap',()=>{
  assert.throws(()=>prepareMetconScore({rx:'RX',timeSeconds:601},clean));assert.throws(()=>prepareMetconScore({rx:'RX'},clean));
  assert.equal(metconKey(clean),metconKey({...clean,name:'Custom identical benchmark'}));
 });
-for(const type of ['AMRAP','Rounds + Reps'])test(type+' requires duration and rounds plus reps',()=>{
- const clean=prepareMetcon({...m,scoreType:type,durationSeconds:720},library);assert.deepEqual(prepareMetconScore({rx:'RX',rounds:5,reps:14},clean),{rx:'RX',notes:'',rounds:5,reps:14});assert.throws(()=>prepareMetcon({...m,scoreType:type},library));assert.throws(()=>prepareMetconScore({rx:'RX',rounds:5},clean));
+for(const type of ['AMRAP','Rounds + Reps'])test(type+' allows an unspecified duration but validates athlete score fields',()=>{
+ const clean=prepareMetcon({...m,scoreType:type,durationSeconds:720},library);assert.deepEqual(prepareMetconScore({rx:'RX',rounds:5,reps:14},clean),{rx:'RX',notes:'',rounds:5,reps:14});const open=prepareMetcon({...m,scoreType:type},library);assert.equal(open.durationSeconds,undefined);assert.throws(()=>prepareMetconScore({rx:'RX',rounds:5},clean));
 });
 test('EMOM records completion, successful minutes, intervals and optional load',()=>{
  const clean=prepareMetcon({...m,scoreType:'EMOM',durationSeconds:600,workSeconds:40,restSeconds:20,movements:[{exerciseId:'rowerg',calories:10,minute:1}]},library);
@@ -62,7 +62,7 @@ test('EMOM records completion, successful minutes, intervals and optional load',
  assert.deepEqual(scoreFields('EMOM'),['completed','successfulMinutes','load']);assert.throws(()=>prepareMetconScore({rx:'RX',successfulMinutes:8},clean));
 });
 test('Rounds for Time, Time Cap and load event have score-specific validation',()=>{
- assert.throws(()=>prepareMetcon({...m,scoreType:'Rounds for Time'},library));assert.equal(prepareMetcon({...m,scoreType:'Rounds for Time',rounds:5},library).rounds,5);
+ assert.equal(prepareMetcon({...m,scoreType:'Rounds for Time'},library).rounds,undefined);assert.equal(prepareMetcon({...m,scoreType:'Rounds for Time',rounds:5},library).rounds,5);
  const cap=prepareMetcon({...m,scoreType:'Time Cap',timeCapSeconds:600},library);assert.equal(prepareMetconScore({rx:'RX',completed:false,rounds:4,reps:10},cap).reps,10);assert.throws(()=>prepareMetconScore({rx:'RX',completed:true},cap));
  const load=prepareMetcon({...m,scoreType:'Load'},library);assert.equal(prepareMetconScore({rx:'RX',load:200,loadUnit:'lbs',reps:3,timeSeconds:30},load).load,200);assert.throws(()=>prepareMetconScore({rx:'RX'},load));
 });

@@ -42,6 +42,9 @@ export function openStore(path, demo=false) {
     try{missingLibraryExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run(LIBRARY_UPDATE,'yes');db.exec('COMMIT');}
     catch(error){db.exec('ROLLBACK');throw error;}
   }
+  const benchExercise=all('exercise').find(e=>e.id==='bench');
+  const namedBench=all('exercise').find(e=>e.name==='Bench Press'&&e.id!=='bench');
+  if(benchExercise&&benchExercise.name==='Barbell Bench Press'&&!namedBench)put('exercise',{...benchExercise,name:'Bench Press'});
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('tracking-library-v1')){db.exec('BEGIN');try{missingTrackingExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('tracking-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('conditioning-library-v1')){db.exec('BEGIN');try{missingConditioningExercises(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('conditioning-library-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}
   if(!db.prepare('SELECT value FROM metadata WHERE key=?').get('single-unders-v1')){db.exec('BEGIN');try{missingSingleUnders(all('exercise')).forEach(e=>put('exercise',e));db.prepare('INSERT INTO metadata VALUES(?,?)').run('single-unders-v1','yes');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}}

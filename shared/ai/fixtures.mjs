@@ -1,6 +1,6 @@
 import {SCHEMA_VERSION,LOAD_MODE,EFFORT_MODE,LOAD_UNIT,DRAFT_STATUS,REFERENCE_TYPE} from './contract.mjs';
 export const FIXTURE_REQUIREMENTS=Object.freeze({trainingDaysPerWeek:4,exerciseFrequency:{bench:2,squat:2,deadlift:1},maxSessionMinutes:75,primaryExerciseIds:['bench','squat','deadlift']});
-const names={bench:'Barbell Bench Press',squat:'Barbell Back Squat',deadlift:'Conventional Deadlift',row:'Bent-over Barbell Row',pullup:'Pull-up',plank:'Forearm Plank'};
+const names={bench:'Bench Press',squat:'Barbell Back Squat',deadlift:'Conventional Deadlift',row:'Bent-over Barbell Row',pullup:'Pull-up',plank:'Forearm Plank'};
 const exercise=(exerciseId,main=false)=>({exerciseId,exerciseName:names[exerciseId],sets:3,reps:main?5:8,load:null,loadMode:LOAD_MODE.ATHLETE_SELECTED,loadUnit:LOAD_UNIT.LBS,percent1RM:null,reference1RM:null,effortMode:main?EFFORT_MODE.RPE:EFFORT_MODE.NONE,rpe:main?8:null,rir:null,rest:main?180:90,tempo:null,increment:2.5,notes:'',progressionInstructions:main?'Coach reviews completed reps and effort before changing next week’s targets.':''});
 export function createFixture(kind='valid'){
   const sessions=[

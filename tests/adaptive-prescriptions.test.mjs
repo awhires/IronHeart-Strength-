@@ -49,7 +49,7 @@ test('known low-effort work stays in history but does not establish strength est
 test('guards ownership, date, stale history, warmups, unsupported reps, pain and recovery',()=>{
  for(const l of [logged({athleteId:'other'}),logged({workoutDate:'2026-10-30'}),logged({workoutDate:'2025-01-01'}),logged({pain:true}),logged({readiness:1})])assert.notEqual(recommendAthleteLoad(target(),{...context,logs:[l]}).status,'recommended');
  for(const patch of [{warmup:true},{completed:false},{load:-20},{reps:11},{rpe:6}]){const l=logged();Object.assign(l.exercises[0].sets[0],patch);assert.notEqual(recommendAthleteLoad(target(),{...context,logs:[l]}).status,'recommended');}
- assert.equal(recommendAthleteLoad({...target(),adaptiveProgression:undefined},context),null);
+ assert.equal(recommendAthleteLoad({...target(),adaptiveProgression:undefined},context).status,'needs_baseline');
 });
 test('new actuals refresh the baseline, one weekly step only, unit conversion and rounding guardrails',()=>{
  const first=logged(),second=logged({id:'second',workoutDate:'2026-10-15'});second.exercises[0].sets[0].load=220;

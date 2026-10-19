@@ -21,3 +21,20 @@ test('hosted goals enforce ownership, persist across restart and preserve histor
  assert.equal((await req('delete','POST',{kind:'exercise',id:exerciseId},coach)).status,409);
  await req('account','DELETE',{},athlete);assert.equal((await req('data','GET',null,coach)).data.strengthGoals.some(g=>g.athleteId==='jordan'),false);
 });
+
+test('hosted manual PR records are athlete-owned, editable, restart-persistent and independent of workout history',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-pr-'));let child;
+ const stop=async()=>{if(child?.exitCode===null){const done=once(child,'exit');child.kill();await done;}};
+ const start=async()=>{child=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:'4214',HOST:'127.0.0.1',DEMO_MODE:'true',DB_PATH:join(dir,'test.sqlite'),AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);};
+ t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});await start();
+ const req=async(path,method='GET',body,token)=>{const r=await fetch('http://127.0.0.1:4214/api/'+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
+ const coach=(await req('demo','POST',{role:'coach',native:true})).data.token,athlete=(await req('demo','POST',{role:'athlete',native:true})).data.token;
+ const before=(await req('data','GET',null,athlete)).data,body={exerciseId:'bench',repMax:1,weightLb:225,date:'2026-10-17',notes:'Known tested max'};
+ assert.equal((await req('strength-pr','POST',body)).status,401);assert.equal((await req('strength-pr','POST',body,coach)).status,403);assert.equal((await req('strength-pr','POST',{...body,weightLb:-1},athlete)).status,400);
+ const created=await req('strength-pr','POST',body,athlete);assert.equal(created.status,200,JSON.stringify(created.data));const id=created.data.id;assert.equal(created.data.source,'athlete_manual');
+ assert.equal((await req('strength-pr','POST',{...body,id,athleteId:'maya'},athlete)).status,403);
+ assert.equal((await req('strength-pr','POST',{...body,id:'foreign'},athlete)).status,404);
+ await stop();await start();let data=(await req('data','GET',null,athlete)).data;assert.equal(data.strengthPRs.length,1);assert.equal(data.strengthPRs[0].weightLb,225);assert.deepEqual(data.logs,before.logs);assert.deepEqual(data.assignments,before.assignments);
+ assert.equal((await req('delete','POST',{kind:'strengthPR',id},coach)).status,403);assert.equal((await req('delete','POST',{kind:'strengthPR',id},athlete)).status,200);
+ data=(await req('data','GET',null,athlete)).data;assert.equal(data.strengthPRs.length,0);assert.deepEqual(data.logs,before.logs);
+});

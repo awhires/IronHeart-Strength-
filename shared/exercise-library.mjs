@@ -1,5 +1,5 @@
 // Additive catalog update; existing coach records take precedence.
-export const LIBRARY_UPDATE='chest-back-legs-2026-10';
+export const LIBRARY_UPDATE='chest-back-legs-speed-bench-2026-10';
 const groups=[
  ['Upper body','Push',[
   ['db-bench','Dumbbell Bench Press','Dumbbell'],['incline-barbell','Incline Barbell Bench Press','Barbell'],
@@ -35,7 +35,7 @@ const groups=[
  ['Lower body','Knee flexion',[['lying-leg-curl','Lying Leg Curl','Machine'],['seated-leg-curl','Seated Leg Curl','Machine']]]
 ];
 const cues={Push:'Set a stable position, brace your trunk, and control both directions through a comfortable range.',Pull:'Keep your trunk steady and control the pull and return without swinging.',Squat:'Brace before descending, keep your feet grounded, and stand with control.',Lunge:'Use a stable stance and keep the working knee aligned with your foot.',Hinge:'Brace your trunk and extend through the hips without overextending your back.','Knee extension':'Adjust the machine pivot to your knee and extend with control.','Knee flexion':'Adjust the pads and curl with a controlled return.'};
-export const additionalExercises=groups.flatMap(([region,pattern,items])=>items.map(([id,name,equipment])=>({id,name,region,equipment,pattern,cues:cues[pattern],video:''})));
+export const additionalExercises=[...groups.flatMap(([region,pattern,items])=>items.map(([id,name,equipment])=>({id,name,region,equipment,pattern,cues:cues[pattern],video:''}))),{id:'speed-bench',name:'Speed Bench',region:'Upper body',equipment:'Barbell',pattern:'Push',cues:'Use a controlled touch and drive the bar with maximal intent while maintaining a stable setup.',video:''}];
 const normalized=name=>String(name||'').toLowerCase().replace(/dumbbells?/g,'db').replace(/barbells?/g,'bb').replace(/push[ -]?ups?/g,'pushup').replace(/pull[ -]?ups?/g,'pullup').replace(/chin[ -]?ups?/g,'chinup').replace(/step[ -]?ups?/g,'stepup').replace(/face pulls/g,'face pull').replace(/[^a-z0-9]/g,'');
 const aliases={
  'db-bench':['Dumbbell Chest Press'],'incline-barbell':['Incline Barbell Press'],

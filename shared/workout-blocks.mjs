@@ -15,14 +15,11 @@ export function prepareMetcon(raw,library){
  if(!m||!text(m.name,200)||!m.name.trim()||!SCORE_TYPES.includes(m.scoreType)||!text(m.notes||''))throw Error('Name the Metcon and choose a scoring type.');
  if(m.format!=null&&!['standard','chipper','intervals'].includes(m.format))throw Error('Choose a valid Metcon format.');
  if(m.scoreMode!=null&&!(SCORE_MODES[m.scoreType]||[]).includes(m.scoreMode))throw Error('Choose a scoring mode for this workout type.');
- if(m.scoreType==='Intervals'&&(!(m.rounds>0)||!(m.workSeconds>0)))throw Error('Intervals need rounds and work duration.');
  if(!Array.isArray(m.repScheme)||m.repScheme.length>100||m.repScheme.some(n=>!Number.isInteger(n)||n<1||n>1000))throw Error('Use a rep scheme such as 50-40-30-20-10.');
  for(const k of ['rounds','durationSeconds','timeCapSeconds','workSeconds','restSeconds','intervalSeconds'])if(m[k]!=null&&!numeric(m[k]))throw Error('Check Metcon rounds and times.');
  if(m.rounds!=null&&(!Number.isInteger(m.rounds)||m.rounds<1))throw Error('Rounds must be a positive whole number.');
- if(['AMRAP','EMOM','Rounds + Reps'].includes(m.scoreType)&&!(m.durationSeconds>0))throw Error('Enter the workout duration.');
- if(m.scoreType==='EMOM'){const explicitInterval=m.intervalSeconds!=null||m.scoreMode!=null;m.intervalSeconds=m.intervalSeconds??60;if(explicitInterval&&(!(m.intervalSeconds>0)||m.durationSeconds%m.intervalSeconds!==0||m.durationSeconds/m.intervalSeconds>100))throw Error('EMOM duration must contain 1–100 complete work intervals.');}
- if(m.scoreType==='Time Cap'&&!(m.timeCapSeconds>0))throw Error('Enter a time cap.');
- if(m.scoreType==='Rounds for Time'&&!(m.rounds>0))throw Error('Enter prescribed rounds.');
+ for(const k of ['durationSeconds','timeCapSeconds','workSeconds','intervalSeconds'])if(m[k]!=null&&m[k]<=0)throw Error('Prescribed durations and work intervals must be positive; leave them blank when unspecified.');
+ if(m.scoreType==='EMOM'&&m.durationSeconds!=null){const explicitInterval=m.intervalSeconds!=null||m.scoreMode!=null;m.intervalSeconds=m.intervalSeconds??60;if(explicitInterval&&(!(m.intervalSeconds>0)||m.durationSeconds%m.intervalSeconds!==0||m.durationSeconds/m.intervalSeconds>100))throw Error('EMOM duration must contain 1–100 complete work intervals.');}
  if(!Array.isArray(m.movements)||!m.movements.length||m.movements.length>30)throw Error('Add 1–30 Metcon movements.');
  m.movements=m.movements.map(v=>{
   const e=library.find(e=>e.id===v.exerciseId);if(!e)throw Error('Choose a library movement.');

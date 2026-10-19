@@ -19,6 +19,7 @@ export const unitLabel=unit=>unit===LOAD_UNIT.KG?'kg':'lb';
 // Read-time copies only. Numeric legacy zero is fixed zero, never inferred bodyweight.
 export function normalizePrescription(item){
   const e=structuredClone(item);
+  if(e.referenceLoad===null)delete e.referenceLoad;
   const defaults={loadMode:number(e.load)?L.FIXED:L.ATHLETE_SELECTED,loadUnit:LOAD_UNIT.LBS,load:null,effortMode:number(e.rpe)?E.RPE:number(e.rir)?E.RIR:E.NONE,rpe:null,rir:null,percent1RM:null,reference1RM:null,tempo:null,increment:defaultIncrement(e.loadUnit),notes:'',progressionInstructions:''};
   for(const [key,value] of Object.entries(defaults))if(e[key]===undefined)e[key]=value;
   return e;
@@ -52,7 +53,7 @@ export function prescriptionText(item){
   const e=movementPrescription(item)||normalizePrescription(item);
   if(e.trackingType&&e.trackingType!=='strength')return CARDIO_TYPES.includes(e.trackingType)?cardioTargetText(e):`${e.sets??1} sets · ${e.metrics?.durationSeconds||e.metrics?.distance?setSummary(e.metrics,e.trackingType):'Duration not specified'+(e.reps!=null?' (legacy '+e.reps+' reps/breaths preserved)':'')}`;
   if(e.setBlocks?.length)return e.setBlocks.map(b=>prescriptionText({...e,...b,sets:b.sets??b.count,setBlocks:undefined})).join(' + ');
-  return [e.sets==null?'Sets not prescribed':`${e.sets} × ${e.repMode==='max'?'Max Reps':e.reps==null?'reps open':e.reps}`,loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,e.rest==null?null:`${e.rest}s rest`].filter(Boolean).join(' · ');
+  return [e.sets==null?'Sets not prescribed':`${e.sets} × ${e.repMode==='max'?'Max Reps':e.reps==null?'reps open':e.reps}`,e.referenceLoad?`${e.referenceLoad.percent}% of ${e.referenceLoad.exerciseName} 1RM`:loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,e.rest==null?null:`${e.rest}s rest`].filter(Boolean).join(' · ');
 }
 export function initialActualLoad(item){const e=normalizePrescription(item);return e.loadMode===L.FIXED?e.load:e.loadMode===L.BODYWEIGHT?0:e.loadMode===L.PERCENTAGE?suggestedLoad(e)?.rounded??null:null;}
 export function prescribedSets(item){const e=normalizePrescription(item);return e.setBlocks?.length?e.setBlocks.flatMap(b=>Array.from({length:b.sets??b.count},()=>normalizePrescription({...e,...b,sets:1,setBlocks:undefined}))):Array.from({length:e.sets??0},()=>e);}
@@ -71,6 +72,7 @@ export function validatePrescription(item,library){
   check(e.repMode==='max'?e.reps===null:e.reps==null||(Number.isInteger(e.reps)&&range(e.reps,1,50)),'Fixed reps may be unspecified; Max Reps uses repMode max and null reps.');
   check(e.rest==null||range(e.rest,0,600),'Rest must be 0–600 seconds or unspecified.');check(range(e.increment,.25,25),'Check rounding increment.');
   check(Object.values(L).includes(e.loadMode)&&Object.values(LOAD_UNIT).includes(e.loadUnit),'Choose a valid load mode and unit.');
+  if(e.referenceLoad){const target=library.find(x=>x.id===e.exerciseId),reference=library.find(x=>x.id===e.referenceLoad.exerciseId);check(target?.name==='Speed Bench'&&reference?.name==='Bench Press'&&e.referenceLoad.exerciseName==='Bench Press'&&[55,60,65].includes(e.referenceLoad.percent)&&e.loadMode===L.ATHLETE_SELECTED,'Speed Bench reference loading must use 55%, 60% or 65% of the Bench Press 1RM and leave the actual load athlete-selected.');}else check(e.referenceLoad==null,'Reference loading must be a valid Speed Bench reference or unspecified.');
   check(e.load===null||(range(e.load,0,1200)&&inPounds(e.load,e.loadUnit)<=1200),'Load must be null or a valid weight up to 1200 lb equivalent.');
   if(e.loadMode===L.FIXED)check(e.load===null||number(e.load),'Fixed load must be a weight or unspecified.');
   if(e.loadMode===L.ATHLETE_SELECTED)check(e.load===null,'Athlete-selected loading leaves weight unspecified.');

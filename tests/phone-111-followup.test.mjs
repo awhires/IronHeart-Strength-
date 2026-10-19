@@ -102,8 +102,8 @@ test('AMRAP assessment modes and EMOM interval modes store structured scores and
 
 test('AI v2 draft accepts score-specific AMRAP and EMOM without irrelevant generic fields',()=>{
  const draft=createFixture();draft.schemaVersion=2;
- const amrap={name:'Wall Ball Assessment',scoreType:'AMRAP',scoreMode:'total_reps',durationSeconds:120,repScheme:[],movements:[{exerciseId:'bench',exerciseName:'Barbell Bench Press',reps:10}],notes:''};
- const emom={name:'EMOM Assessment',scoreType:'EMOM',scoreMode:'completed_intervals',durationSeconds:600,intervalSeconds:60,repScheme:[],movements:[{exerciseId:'bench',exerciseName:'Barbell Bench Press',reps:10,minute:1}],notes:''};
+ const amrap={name:'Wall Ball Assessment',scoreType:'AMRAP',scoreMode:'total_reps',durationSeconds:120,repScheme:[],movements:[{exerciseId:'bench',exerciseName:'Bench Press',reps:10}],notes:''};
+ const emom={name:'EMOM Assessment',scoreType:'EMOM',scoreMode:'completed_intervals',durationSeconds:600,intervalSeconds:60,repScheme:[],movements:[{exerciseId:'bench',exerciseName:'Bench Press',reps:10,minute:1}],notes:''};
  for(const week of draft.program.plan)for(const session of week.sessions){session.exercises=[];session.blocks=[{id:'a',type:'Metcon',name:'Assessment',metcon:amrap},{id:'e',type:'Metcon',name:'Assessment',metcon:emom}];}
  const review=validateDraft(draft,library);assert.equal(review.canApprove,true,JSON.stringify(review.findings.filter(f=>f.severity==='error')));
 });

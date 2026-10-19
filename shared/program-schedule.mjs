@@ -20,6 +20,27 @@ export function validateProgramMetadata(p){
 export function scheduledDate(a,week,index){const explicit=a.schedule?.dates?.[sessionKey(week,index)];if(explicit)return explicit;const s=a.plan.find(w=>w.week===week)?.sessions[index];if(!s)return null;const start=date(a.startDate),offset=(start.getUTCDay()+6)%7;return add(a.startDate,-offset+(week-1)*7+(s.day+6)%7);}
 export function weekdayDate(a,week,index,day){const current=scheduledDate(a,week,index);return add(current,-((date(current).getUTCDay()+6)%7)+(day+6)%7);}
 export function scheduleRows(a,dates=a.schedule?.dates){return a.plan.flatMap(w=>w.sessions.map((s,index)=>({week:w.week,index,session:s,key:sessionKey(w.week,index),date:dates?.[sessionKey(w.week,index)]||scheduledDate(a,w.week,index)}))).filter(r=>!r.session.cancelled);}
+// Add dates only for newly added, active sessions. Explicit athlete dates remain intact.
+export function extendProgramSchedule(assignment,previousPlan=[]){
+ const schedule=assignment.schedule;if(!schedule?.startDate)return assignment;
+ const next=structuredClone(assignment),dates={...(schedule.dates||{})},oldKeys=new Set(previousPlan.flatMap(w=>w.sessions.map((_,index)=>sessionKey(w.week,index))));
+ const availableDays=Array.isArray(schedule.availableDays)&&schedule.availableDays.length?schedule.availableDays:[0,1,2,3,4,5,6],preferences=schedule.preferences||{};let previous=null;
+ for(const week of next.plan){
+  const start=add(schedule.startDate,(week.week-1)*7),end=add(start,7);
+  for(let index=0;index<week.sessions.length;index++){
+   const session=week.sessions[index];if(session.cancelled)continue;const id=sessionKey(week.week,index);
+   if(dates[id]){previous={date:dates[id],session};continue;}
+   if(oldKeys.has(id)){previous={date:scheduledDate(next,week.week,index),session};continue;}
+   const desired=preferences[session.scheduleRole];let cursor=start,found=null;
+   while(cursor<end){const day=date(cursor).getUTCDay(),gap=previous?(+date(cursor)-+date(previous.date))/3600000:Infinity,recovery=previous?.session.minRecoveryHours||0;
+    if(availableDays.includes(day)&&(desired===undefined||desired===day)&&(!previous||cursor>previous.date)&&gap>=recovery){found=cursor;break;}cursor=add(cursor,1);
+   }
+   if(!found)throw Error(`The athlete's saved training days cannot fit the new Week ${week.week} session "${session.name}". Adjust the program schedule before saving this change.`);
+   dates[id]=found;previous={date:found,session};
+  }
+ }
+ next.schedule={...schedule,dates};return next;
+}
 export function setupRoles(p){const sessions=p.plan?.flatMap(w=>w.sessions)||p.sessions||[];return [...new Set(sessions.map(s=>s.scheduleRole).filter(Boolean))];}
 export function reviewWeek(p,schedule,week){return Array.from({length:7},(_,i)=>{const d=add(schedule.startDate,(week-1)*7+i);const entry=Object.entries(schedule.dates).find(([k,value])=>k.startsWith(`${week}:`)&&value===d);return {date:d,day:date(d).getUTCDay(),session:entry?(p.plan?.[week-1]?.sessions||p.sessions)[+entry[0].split(':')[1]]:null};});}
 export function proposeSchedule(a,input){
