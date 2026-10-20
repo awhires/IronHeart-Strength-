@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {once} from 'node:events';
+import {newPrescription} from '../shared/prescriptions.mjs';
+
+test('coach saves propagate six-week master and nonconflicting exercise edits to two started assignments',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-live-sync-')),port='4226',child=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:port,HOST:'127.0.0.1',DEMO_MODE:'true',DB_PATH:join(dir,'test.sqlite'),AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
+ t.after(async()=>{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done;}await rm(dir,{recursive:true,force:true});});for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);
+ const req=async(path,method='GET',body,token)=>{const response=await fetch(`http://127.0.0.1:${port}/api/${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,data:await response.json()};};
+ const coach=(await req('demo','POST',{role:'coach',native:true})).data.token;
+ const createAthlete=async(name,email)=>{const created=await req('athletes','POST',{name,email,sport:'Strength training'},coach);assert.equal(created.status,200);const joined=await req('redeem','POST',{code:created.data.code,password:'strong-test-password-123',native:true});assert.equal(joined.status,200);return {id:joined.data.user.id,token:joined.data.token};};
+ const athletes=[await createAthlete('Sync Athlete A','sync-a@example.test'),await createAthlete('Sync Athlete B','sync-b@example.test')];
+ const exercise=(id,reps=5)=>({...newPrescription(id),sets:3,reps,loadMode:'athlete_selected',effortMode:'rpe',rpe:7,increment:5});
+ const session=(name,day)=>({name,day,exercises:[exercise('bench'),exercise('lat-pulldown')]});
+ const makePlan=weeks=>Array.from({length:weeks},(_,i)=>({week:i+1,sessions:[session(`Upper ${i+1}`,1),session(`Lower ${i+1}`,3)]}));
+ const initial=(await req('data','GET',null,coach)).data.programs[0];
+ const created=await req('programs','POST',{...initial,id:undefined,name:'Live two-athlete sync',goal:'Strength',weeks:4,description:'Four week start',plan:makePlan(4)},coach);assert.equal(created.status,200,JSON.stringify(created.data));const program=created.data;
+ const assignments=[];
+ for(const athlete of athletes){const assigned=await req('assign','POST',{programId:program.id,athleteId:athlete.id,startDate:'2026-10-05',requireSetup:true},coach);assert.equal(assigned.status,200,JSON.stringify(assigned.data));const started=await req('enroll','POST',{assignmentId:assigned.data.id,startDate:'2026-10-05',availableDays:[1,3],preferences:{}},athlete.token);assert.equal(started.status,200,JSON.stringify(started.data));assignments.push(started.data);}
+ const manual=await req('strength-pr','POST',{exerciseId:'bench',repMax:1,weightLb:225,date:'2026-10-05',notes:'keep baseline'},athletes[0].token);assert.equal(manual.status,200,JSON.stringify(manual.data));
+ for(let i=0;i<athletes.length;i++){const a=assignments[i],s=a.plan[0].sessions[0];const log=await req('log','POST',{assignmentId:a.id,week:1,session:0,prescriptionRevision:s.prescriptionRevision||0,readiness:4,pain:false,notes:'started before coach edit',exercises:s.exercises.map(e=>({exerciseId:e.exerciseId,sets:Array.from({length:e.sets},()=>({load:135,loadUnit:'lbs',reps:e.reps,rpe:7}))}))},athletes[i].token);assert.equal(log.status,200,JSON.stringify(log.data));}
+ const personalized=structuredClone(assignments[0].plan[2].sessions[0].exercises);personalized[0].reps=6;const savedPersonal=await req('assignment','PUT',{id:assignments[0].id,week:3,session:0,exercises:personalized},coach);assert.equal(savedPersonal.status,200,JSON.stringify(savedPersonal.data));
+ const expanded=makePlan(6);expanded[2].sessions[0].exercises[0].sets=4;expanded[2].sessions[0].exercises[0].reps=7;expanded[2].sessions[0].exercises.push(exercise('row',10));
+ const master=await req('programs','POST',{...program,name:'Six week synchronized program',weeks:6,description:'Extended safely',plan:expanded},coach);assert.equal(master.status,200,JSON.stringify(master.data));assert.equal(master.data.weeks,6);assert.equal(master.data.sync.assignments,2);assert.ok(master.data.sync.updated>=4);assert.equal(master.data.sync.conflicts.length,1);assert.equal(master.data.sync.conflicts[0].athleteId,athletes[0].id);
+ const read=await Promise.all(athletes.map(a=>req('data','GET',null,a.token)));for(let i=0;i<read.length;i++){assert.equal(read[i].status,200);const data=read[i].data,a=data.assignments.find(x=>x.id===assignments[i].id);assert.ok(a,'same assignment identity is returned after a fresh athlete request');assert.equal(a.weeks,6);assert.equal(a.name,'Six week synchronized program');assert.deepEqual(a.plan.map(w=>w.week),[1,2,3,4,5,6]);assert.equal(a.plan[2].sessions[0].exercises[0].sets,4);assert.ok(a.plan[2].sessions[0].exercises.some(e=>e.exerciseId==='row'));assert.equal(data.logs.filter(l=>l.assignmentId===a.id&&l.week===1).length,1);assert.equal(data.logs.find(l=>l.assignmentId===a.id&&l.week===1).exercises[0].target.reps,5);assert.ok(a.schedule.dates['5:0']);assert.ok(a.schedule.dates['6:0']);assert.equal(a.schedule.dates['1:0'],'2026-10-05');if(i===0){assert.equal(a.plan[2].sessions[0].exercises[0].reps,6,'the athlete-customized reps survive a conflicting coach edit');assert.equal(data.strengthPRs.find(p=>p.exerciseId==='bench').weightLb,225);}else assert.equal(a.plan[2].sessions[0].exercises[0].reps,7,'the other athlete receives the coach rep update');}
+ const coachData=(await req('data','GET',null,coach)).data;assert.deepEqual(coachData.programs.find(p=>p.id===program.id).plan,master.data.plan);assert.equal(coachData.assignments.filter(a=>a.programId===program.id).length,2);
+});

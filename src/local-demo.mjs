@@ -50,7 +50,7 @@ export function createLocalDemo(storage){
     const requestId=b.clientRequestId;delete b.clientRequestId;
     const receiptKey=requestId&&user?`${user.id}:${requestId}`:null;
     if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){const old=state.workoutReceipts?.[receiptKey];if(old){if(old.payload!==JSON.stringify({route,b}))throw Error('Save ID belongs to a different workout.');const prior=state.logs.find(l=>l.id===old.id);if(!prior)throw Error('Workout was deleted; start a new workout to redo it.');return clone(prior);}}
-    let result={ok:true};
+    let result={ok:true},programSync=null;
     if(route==='config')result={demo:true,standalone:true,previewAthletes:state.athletes.map(({id,name})=>({id,name}))};
     else if(route==='demo'&&method==='POST'){
       const selected=b.role==='athlete'?(b.athleteId?state.athletes.find(a=>a.id===b.athleteId):state.athletes.find(a=>a.id==='jordan')||state.athletes[0]):state.coach;
@@ -81,11 +81,12 @@ export function createLocalDemo(storage){
         if(b.id&&!state[route].some(x=>x.id===b.id))throw Error('Record not found.');
         const previous=b.id&&route==='programs'?state.programs.find(p=>p.id===b.id):null;
         result=save(route,{...prepared,id:b.id||id()});
-        if(previous)for(const a of state.assignments.filter(a=>a.programId===result.id)){
+        if(previous){programSync={assignments:0,updated:0,completed:0,personalized:0,progression:0,conflicts:[]};for(const a of state.assignments.filter(a=>a.programId===result.id)){
           const oldPlan=assignment(previous,a.athleteId,a.startDate).plan,newPlan=assignment(result,a.athleteId,a.startDate).plan;
           const synced=propagateProgram(a,oldPlan,newPlan,state.logs,previous.progressionOptions,result.progressionOptions,previous,result);
           Object.assign(a,synced.assignment);
-        }
+          programSync.assignments++;programSync.updated+=synced.summary.updated;programSync.completed+=synced.summary.completed;programSync.personalized+=synced.summary.personalized;programSync.progression+=synced.summary.progression;programSync.conflicts.push(...synced.summary.conflictDetails.map(item=>({athleteId:a.athleteId,assignmentId:a.id,...item})));
+        }}
       }else if(route==='athletes'&&method==='POST'){
         coach();if(!b.name?.trim()||!b.email?.trim())throw Error('Enter an athlete name and email.');
         if(state.athletes.some(a=>a.email.toLowerCase()===b.email.toLowerCase()))throw Error('This athlete email already exists.');
@@ -132,6 +133,6 @@ export function createLocalDemo(storage){
     // Persist before acknowledging success; quota failures leave the prior state intact.
     if(receiptKey&&['log','tracker'].includes(route)&&method==='POST'){state.workoutReceipts={...(state.workoutReceipts||{}),[receiptKey]:{id:result.id,payload:JSON.stringify({route,b})}};}
     storage.setItem(KEY,JSON.stringify(state));
-    return route==='data'?withAthleteRecommendations(normalizeData(result)):clone(result);
+    return route==='data'?withAthleteRecommendations(normalizeData(result)):clone(programSync?{...result,sync:programSync}:result);
   };
 }

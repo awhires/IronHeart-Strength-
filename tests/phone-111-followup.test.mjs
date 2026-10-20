@@ -23,14 +23,16 @@ test('template propagation preserves schedule and personalized sessions, with re
  newPlan[0].sessions[0].exercises[0].reps=8;
  newPlan[1].sessions[0].exercises[0].reps=6;
  newPlan[2].sessions[0].exercises[0].reps=7;
+ newPlan[2].sessions[0].exercises[1].sets=5;
  const {assignment:after,summary}=propagateProgram(assigned,oldPlan,newPlan,[{assignmentId:'assignment',week:1,session:0}]);
- assert.deepEqual(summary,{updated:1,completed:1,personalized:1,progression:0});
+ assert.deepEqual(summary,{updated:2,completed:1,personalized:1,progression:0,conflicts:1,conflictDetails:[{week:3,session:'Phone strength',field:'exercise:bench#0.reps'}]});
  assert.equal(after.plan[0].sessions[0].exercises[0].reps,5);
  assert.equal(after.plan[1].sessions[0].exercises[0].reps,6);
  assert.equal(after.plan[1].sessions[0].day,5);
  assert.equal(after.plan[1].sessions[0].cancelled,false);
  assert.equal(after.plan[1].sessions[0].prescriptionRevision,1);
  assert.equal(after.plan[2].sessions[0].exercises[0].reps,9);
+ assert.equal(after.plan[2].sessions[0].exercises[1].sets,5,'nonconflicting coach changes in a personalized session still propagate');
 });
 
 test('progression-only master edit revises affected future sessions, preserves completed logs and personalized content, and rejects stale saves',async()=>{
