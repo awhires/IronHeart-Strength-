@@ -56,6 +56,12 @@ test('optional prescriptions save; unspecified reps stay distinct from Max Reps 
  const max={...target,sets:3,reps:null,repMode:'max',load:100,loadMode:'fixed'};assert.match(prescriptionText(max),/3 × Max Reps/);assert.doesNotMatch(prescriptionText(max),/reps open/);assert.equal(errors(max).length,0);
  const noReps={...target,sets:3,load:100,loadMode:'fixed'};assert.equal(errors(noReps).length,0);assert.match(prescriptionText(noReps),/3 × reps open/);
 });
+test('coach programs accept single-week extensions through twelve weeks',()=>{
+ const session={name:'Bench day',day:1,exercises:[base()]};
+ const program=prepareProgram({name:'Five-week strength block',goal:'Strength',weeks:5,description:'',plan:Array.from({length:5},(_,i)=>({week:i+1,sessions:[structuredClone(session)]}))},exercises);
+ assert.equal(program.weeks,5);assert.equal(program.plan.length,5);assert.equal(program.plan[4].week,5);
+ assert.throws(()=>prepareProgram({name:'Too long',goal:'Strength',weeks:13,description:'',sessions:[session]},exercises),/supported block length/);
+});
 test('AI review accepts open prescriptions and the explicit previous-performance delta mode',()=>{
  const draft=createFixture(),exercise=draft.program.plan[0].sessions[0].exercises[0];
  Object.assign(exercise,{sets:null,reps:null,repMode:'fixed',load:null,loadMode:'none',loadDelta:null,effortMode:'rpe',rpe:null,rir:null,rest:null,tempo:null});

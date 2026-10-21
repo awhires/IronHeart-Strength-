@@ -107,7 +107,11 @@ export function prepareItems(items,library){
 }
 export function prepareProgram(input,library){
   const p=structuredClone(input);
-  if(!object(p)||!text(p.name,1,200)||!text(p.goal,1,200)||!PROGRAM_LENGTHS.includes(p.weeks)||!text(p.description??''))throw Error('Provide a program name, goal and supported block length.');
+  // Coaches can extend any modality one week at a time in Program Editor.
+  // Keep the same safe maximum for all saved templates; AI draft constraints
+  // remain separately enforced by the AI contract and review flow.
+  const validWeeks=Number.isInteger(p?.weeks)&&p.weeks>=1&&p.weeks<=12;
+  if(!object(p)||!text(p.name,1,200)||!text(p.goal,1,200)||!validWeeks||!text(p.description??''))throw Error('Provide a program name, goal and supported block length.');
   for(const k of ['coachNotes','progressionInstructions'])if(p[k]!==undefined&&!text(p[k]))throw Error('Program notes must be text.');
   const sessions=value=>{
     if(!Array.isArray(value)||value.length<1||value.length>7)throw Error('Use 1–7 sessions per week.');

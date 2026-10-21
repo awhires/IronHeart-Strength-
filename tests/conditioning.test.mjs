@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseTime,formatTime} from '../shared/time.mjs';
 import {cardioMetrics,cardioStats,comparableDistance} from '../shared/cardio-stats.mjs';
-import {prepareMetcon,prepareMetconScore,prepareBlocks,recordBlockScores,metconKey,scoreFields} from '../shared/workout-blocks.mjs';
+import {prepareMetcon,prepareMetconScore,prepareBlocks,recordBlockScores,metconKey,scoreFields,scoreText} from '../shared/workout-blocks.mjs';
 import {metconStats} from '../shared/metcon-stats.mjs';
 import {prepareProgram,newPrescription,recordPerformance} from '../shared/prescriptions.mjs';
 import {prepareTrackerWorkout} from '../shared/workout-tracker.mjs';
@@ -65,6 +65,13 @@ test('Rounds for Time, Time Cap and load event have score-specific validation',(
  assert.equal(prepareMetcon({...m,scoreType:'Rounds for Time'},library).rounds,undefined);assert.equal(prepareMetcon({...m,scoreType:'Rounds for Time',rounds:5},library).rounds,5);
  const cap=prepareMetcon({...m,scoreType:'Time Cap',timeCapSeconds:600},library);assert.equal(prepareMetconScore({rx:'RX',completed:false,rounds:4,reps:10},cap).reps,10);assert.throws(()=>prepareMetconScore({rx:'RX',completed:true},cap));
  const load=prepareMetcon({...m,scoreType:'Load'},library);assert.equal(prepareMetconScore({rx:'RX',load:200,loadUnit:'lbs',reps:3,timeSeconds:30},load).load,200);assert.throws(()=>prepareMetconScore({rx:'RX'},load));
+});
+test('Load Metcons prescribe sets and reps per movement and score the heaviest load',()=>{
+ const load=prepareMetcon({...m,scoreType:'Load',name:'Bench Press 3RM',movements:[{exerciseId:'bench',sets:5,reps:3}]},library);
+ assert.deepEqual({sets:load.movements[0].sets,reps:load.movements[0].reps},{sets:5,reps:3});
+ const score=prepareMetconScore({rx:'RX',load:225,loadUnit:'lbs'},load);assert.equal(score.load,225);assert.match(scoreText(score),/225 lbs/);
+ assert.notEqual(metconKey(load),metconKey({...load,movements:[{exerciseId:'bench',sets:4,reps:3}]}));
+ assert.throws(()=>prepareMetcon({...m,scoreType:'Load',movements:[{exerciseId:'bench',sets:1.5,reps:3}]},library),/positive whole number/);
 });
 test('mixed session stores canonical exercises and ordered block indexes without duplication',()=>{
  const p=prepareProgram({name:'Mixed',goal:'Performance',weeks:4,sessions:[{name:'Day',day:1,exercises:[newPrescription('bench'),{exerciseId:'rowerg',trackingType:'erg',metrics:{durationSeconds:330,paceSeconds:104,distanceUnit:'m'}}],blocks:[{id:'s',type:'Strength',exerciseIndexes:[0]},{id:'m',type:'Metcon',metcon:m},{id:'c',type:'Cardio',exerciseIndexes:[1]}]}]},library);
