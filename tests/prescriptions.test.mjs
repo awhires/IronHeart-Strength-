@@ -76,7 +76,7 @@ test('actual performance is independent and snapshots contain the original full 
   const logged=recordPerformance(entries,[e]);assert.deepEqual(logged[0].target,e);assert.equal(logged[0].sets[0].load,50);assert.equal(logged[0].sets[0].rpe,null);
   delete entries[0].sets[0].rpe;assert.equal(recordPerformance(entries,[e])[0].sets[0].rpe,null);
   e.rir=3;assert.equal(logged[0].target.rir,2);assert.equal(logged[0].target.load,null);
-  assert.throws(()=>recordPerformance(entries,[base()]));
+  assert.equal(recordPerformance(entries,[base()])[0].sets[0].rpe,null,'actual RPE remains optional even when the coach prescribed an RPE target');
 });
 test('richer targets are preserved by legacy periodization and held by recommendations',()=>{
   for(const patch of [{loadMode:'percentage',percent1RM:75,load:null},{loadMode:'bodyweight',load:null},{loadMode:'athlete_selected',load:null},{effortMode:'rir',rpe:null,rir:2},{loadUnit:'kg'}]){

@@ -1,0 +1,31 @@
+import {createRequire} from 'node:module';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+
+test('athlete loaded-hold quick logging and coach exercise profile persistence',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-repeated-sets-')),base='http://127.0.0.1:4248',server=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:'4248',HOST:'127.0.0.1',DB_PATH:join(dir,'test.sqlite'),DEMO_MODE:'true',AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});let output='',browser;
+ server.stdout.on('data',c=>output+=c);server.stderr.on('data',c=>output+=c);
+ t.after(async()=>{await browser?.close();if(server.exitCode===null){const done=once(server,'exit');server.kill();await done;}await rm(dir,{recursive:true,force:true});});
+ for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);
+ browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await page.request.post(base+'/api/demo',{data:{role:'coach'}});
+ const date=new Date(),localDate=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+ const program=await page.request.post(base+'/api/programs',{data:{name:'Loaded hold logger QA',goal:'Strength',weeks:1,description:'',sessions:[{name:'Loaded holds',day:date.getDay(),exercises:[{exerciseId:'back-rack-hold',trackingType:'loadedTimed',sets:4,rest:60,metrics:{durationSeconds:30,load:100,loadUnit:'lbs'},loadMode:'fixed'}]}]}});assert.equal(program.status(),200,await program.text());const p=await program.json();
+ const assignment=await page.request.post(base+'/api/assign',{data:{programId:p.id,athleteId:'jordan',startDate:localDate}});assert.equal(assignment.status(),200,await assignment.text());const a=await assignment.json();
+ await page.request.post(base+'/api/demo',{data:{role:'athlete'}});await page.goto(base);await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(a.id);await page.getByRole('button',{name:'W1',exact:true}).click();await page.locator('.calendar-event').filter({hasText:'Loaded holds'}).click();
+ const workout=page.getByRole('dialog'),logger=workout.locator('.repeated-set-logger').first();assert.equal(await workout.getByLabel('Back Rack Barbell Hold Reps',{exact:true}).count(),0,'loaded timed holds do not show rep inputs');assert.equal(await workout.getByLabel('Completed rounds',{exact:true}).count(),0,'strength hold rows do not show MetCon scoring');
+ assert.equal(await workout.getByLabel('Back Rack Barbell Hold Load',{exact:true}).inputValue(),'100');assert.equal(await workout.getByLabel('Back Rack Barbell Hold Duration (M:SS)',{exact:true}).inputValue(),'0:30');await workout.getByLabel('Back Rack Barbell Hold Sets completed',{exact:true}).fill('3');await workout.getByLabel('Back Rack Barbell Hold Load',{exact:true}).fill('95');await logger.getByRole('button',{name:'Apply to All Sets',exact:true}).click();await logger.locator('.repeated-set-individual summary').click();assert.equal(await logger.locator('.repeated-set-row').count(),3);assert.equal(await workout.getByLabel('Set 1 completed',{exact:true}).isChecked(),true);
+ await workout.getByRole('button',{name:'Complete workout',exact:true}).click();await page.getByRole('status').getByText(/Partial workout saved/).waitFor();const log=(await(await page.request.get(base+'/api/data')).json()).logs.find(l=>l.assignmentId===a.id);assert.equal(log.status,'partially_completed');assert.equal(log.exercises[0].target.metrics.load,100);assert.deepEqual(log.exercises[0].sets.map(s=>[s.load,s.durationSeconds]),[[95,30],[95,30],[95,30]]);
+
+ await page.request.post(base+'/api/demo',{data:{role:'coach'}});await page.goto(base);await page.getByRole('button',{name:'Open navigation',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:'Exercise library',exact:true}).click();await page.getByPlaceholder('Search exercises or equipment…').fill('Manual Hold Profile QA');await page.getByRole('button',{name:'Add exercise',exact:true}).click();await page.getByLabel('Exercise name',{exact:true}).fill('Manual Hold Profile QA');await page.getByLabel('Measurement profile',{exact:true}).selectOption('loadedTimed');await page.getByRole('button',{name:'Save exercise',exact:true}).click();await page.getByRole('status').getByText('Exercise saved').waitFor();
+ let data=await(await page.request.get(base+'/api/data')).json(),custom=data.exercises.find(e=>e.name==='Manual Hold Profile QA');assert.equal(custom.trackingType,'loadedTimed');
+ await page.getByRole('button',{name:'Edit Manual Hold Profile QA',exact:true}).click();await page.getByLabel('Measurement profile',{exact:true}).selectOption('strength');await page.getByRole('button',{name:'Save exercise',exact:true}).click();await page.getByRole('status').getByText('Exercise saved').waitFor();await page.reload();data=await(await page.request.get(base+'/api/data')).json();custom=data.exercises.find(e=>e.id===custom.id);assert.equal(custom.trackingType,'strength');
+ await page.getByRole('button',{name:'Open navigation',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:'Exercise library',exact:true}).click();await page.getByPlaceholder('Search exercises or equipment…').fill('Manual Hold Profile QA');await page.getByRole('button',{name:'Edit Manual Hold Profile QA',exact:true}).click();assert.equal(await page.getByRole('dialog').getByLabel('Measurement profile',{exact:true}).inputValue(),'strength');assert.deepEqual(errors,[]);await context.close();
+});

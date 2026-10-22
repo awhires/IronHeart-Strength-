@@ -2,6 +2,7 @@ import {AI_DRAFT_SCHEMA_V2,conditioningSession} from './conditioning-contract.mj
 import {validateCardioPrescription} from '../cardio-prescriptions.mjs';
 import {prepareBlocks} from '../workout-blocks.mjs';
 import {trackingProfile,CARDIO_TYPES} from '../tracking.mjs';
+import {MOVEMENT_TYPES} from '../movement-prescriptions.mjs';
 import {AI_DRAFT_SCHEMA, LOAD_MODE, LOAD_UNIT, EFFORT_MODE, SEVERITY, TEMPO_REGEX, inPounds} from './contract.mjs';
 import {validMaximum, calculatePercentageLoad} from '../prescriptions.mjs';
 const record = x => x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -56,7 +57,7 @@ export function estimateSessionMinutes(session){
   let seconds=600;
   if(!Array.isArray(session?.exercises))return null;
   for(const e of session.exercises){
-    if(e?.trackingType){if(!number(e.metrics?.durationSeconds))return null;seconds+=120+e.intervalCount*e.metrics.durationSeconds+Math.max(0,e.intervalCount-1)*(e.restSeconds||0);continue;}
+    if(e?.trackingType){if(!number(e.metrics?.durationSeconds))return null;if(['timed','loadedTimed','carry'].includes(e.trackingType)){const sets=e.sets||1;seconds+=120+sets*e.metrics.durationSeconds+Math.max(0,sets-1)*(e.rest||60);}else seconds+=120+e.intervalCount*e.metrics.durationSeconds+Math.max(0,e.intervalCount-1)*(e.restSeconds||0);continue;}
     if(!record(e)||!number(e.sets)||!number(e.reps)||!number(e.rest))return null;
     const tempo=typeof e.tempo==='string'&&TEMPO_REGEX.test(e.tempo)?e.tempo.split('-').reduce((n,x)=>n+(x==='X'?1:Number(x)),0):4;
     seconds+=120+e.sets*e.reps*tempo+Math.max(0,e.sets-1)*e.rest;
@@ -110,7 +111,28 @@ export function validateDraft(draft,library=[],requirements={}){
             if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,`“${e.exerciseName}” needs a library match (Week ${w.week}, ${s.name}).`,SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
             if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Review your equipment choice.`,SEVERITY.WARNING);
-            if(e.trackingType){try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
+            if(MOVEMENT_TYPES.includes(e.trackingType)){
+              const m=e.metrics||{},movementType=trackingProfile(known);
+              if(!known||movementType!==e.trackingType)add('MOVEMENT_PROFILE_MISMATCH',`${ep}/trackingType`,'Choose a matching timed, loaded-timed or carry exercise from the library.');
+              if(!Number.isInteger(e.sets)||e.sets<1||e.sets>12)add('INVALID_MOVEMENT_SETS',`${ep}/sets`,'Movement prescriptions need 1–12 sets.');
+              if(e.trackingType!=='carry'&&(!number(m.durationSeconds)||m.durationSeconds<=0||m.durationSeconds>86400))add('INVALID_MOVEMENT_DURATION',`${ep}/metrics/durationSeconds`,'Enter a positive duration for every timed set.');
+              if(e.trackingType==='carry'&&(!number(m.distance)||m.distance<=0||!['m','km','mi','yd'].includes(m.distanceUnit)))add('INVALID_CARRY_DISTANCE',`${ep}/metrics/distance`,'Carry prescriptions need a positive distance and unit.');
+              if(m.rpe!=null&&(!number(m.rpe)||m.rpe<1||m.rpe>10))add('INVALID_MOVEMENT_RPE',`${ep}/metrics/rpe`,'Optional RPE must be 1–10.');
+              if(['loadedTimed','carry'].includes(e.trackingType)){
+                if(!['fixed','percentage','athlete_selected','none'].includes(e.loadMode))add('INVALID_MOVEMENT_LOAD_MODE',`${ep}/loadMode`,'Choose fixed, percentage, athlete-selected, or no external load.');
+                if(e.loadMode==='percentage'){
+                  const reference=library.find(x=>x.id===e.referenceExerciseId);
+                  if(!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100)add('INVALID_MOVEMENT_PERCENTAGE',`${ep}/percent1RM`,'Percentage must be between 1 and 100.');
+                  if(!reference||trackingProfile(reference)!=='strength'||reference.name!==e.referenceExerciseName)add('INVALID_MOVEMENT_REFERENCE',`${ep}/referenceExerciseId`,'Select a matching strength exercise as the reference lift.');
+                  if(m.load!=null)add('CONFLICTING_MOVEMENT_LOAD',`${ep}/metrics/load`,'Percentage prescriptions leave the actual load empty; the athlete recommendation is resolved from their reference-lift evidence.');
+                }else if(e.loadMode==='fixed'){
+                  if(!number(m.load)||m.load<=0||m.load>1200||!['lbs','kg'].includes(m.loadUnit))add('INVALID_MOVEMENT_LOAD',`${ep}/metrics/load`,'A fixed loaded movement needs a positive load and weight unit.');
+                  if(e.percent1RM!=null||e.referenceExerciseId!=null)add('CONFLICTING_MOVEMENT_REFERENCE',`${ep}/loadMode`,'Remove percentage-reference fields from a fixed-load movement.');
+                }else if(m.load!=null&&m.load!==0)add('CONFLICTING_MOVEMENT_LOAD',`${ep}/metrics/load`,'Athlete-selected or no-load movement targets must not contain a prescribed external load.');
+              }
+              return;
+            }
+            if(e.trackingType){if(!CARDIO_TYPES.includes(e.trackingType)){add('INVALID_TRACKING_TYPE',`${ep}/trackingType`,'Choose a supported exercise measurement profile.');return;}try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
             if(known&&CARDIO_TYPES.includes(trackingProfile(known)))add('CARDIO_REQUIRES_TYPED_PRESCRIPTION',ep,'Use a v2 cardio prescription with distance/time metrics, not strength sets/reps.');
             if(e.loadMode===LOAD_MODE.FIXED&&e.load!==null&&(!number(e.load)||e.load<=0))add('INVALID_LOAD',`${ep}/load`,'A fixed load must be positive or intentionally unspecified.');
             if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&e.load!==0)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Bodyweight cannot have a fixed external load.');

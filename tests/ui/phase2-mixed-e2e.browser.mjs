@@ -54,38 +54,28 @@ test('Phase 2 mixed Strength + Metcon builder, athlete logging, skip/edit, progr
  await athletePage.request.post(base+'/api/demo',{data:{role:'athlete'}});await athletePage.goto(base);await athletePage.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await athletePage.getByLabel('Current program',{exact:true}).selectOption(assignment.id);await athletePage.getByRole('button',{name:'W1',exact:true}).click();
  const event=()=>athletePage.locator('.calendar-event').filter({hasText:'12-minute AMRAP'});
  await event().click();let workout=athletePage.getByRole('dialog');
- const frontTable=workout.locator('.grouped-sets').nth(0),frontRow=frontTable.locator('tbody tr').first(),rowHtml=await frontRow.innerHTML(),rowInputs=frontRow.locator('input[type="number"]');assert.equal(await rowInputs.count(),4,`sets, reps, load and optional RPE inputs; row: ${rowHtml}`);
+ const frontLogger=workout.locator('.repeated-set-logger').first();await frontLogger.locator('.repeated-set-individual summary').click();const strengthRows=frontLogger.locator('.repeated-set-row');assert.equal(await strengthRows.count(),5,'one actual logging row per prescribed strength set');for(let i=0;i<5;i++){const row=strengthRows.nth(i);assert.equal(await row.getByRole('spinbutton',{name:/ Reps$/}).count(),1);assert.equal(await row.getByRole('spinbutton',{name:/ Load$/}).count(),1);assert.equal(await row.getByRole('spinbutton',{name:/ RPE \(optional\)$/}).count(),1);assert.equal(await row.getByLabel('Set '+(i+1)+' completed',{exact:true}).isChecked(),false);}
  const scoreField=name=>workout.locator('label.field').filter({hasText:name}).locator('input');
- assert.equal(await frontTable.locator('input[aria-label="Completed rounds"]').count(),0);assert.equal(await frontTable.locator('select[aria-label="RX / scaled"]').count(),0);
+ assert.equal(await frontLogger.locator('input[aria-label="Completed rounds"]').count(),0);assert.equal(await frontLogger.locator('select[aria-label="RX / scaled"]').count(),0);
  assert.equal(await scoreField('Completed rounds').count(),1);assert.equal(await scoreField('Additional reps').count(),1);assert.equal(await workout.locator('label.field').filter({hasText:'RX / scaled'}).locator('select').count(),1);assert.equal(await scoreField('Completion time (M:SS)').count(),0);assert.equal(await scoreField('Heaviest load achieved').count(),0);
 
- async function splitIntoSingleSetRows(table,name,count,reps,loadStart){
-  const row=i=>table.locator('tbody tr').nth(i-1),numbers=i=>row(i).locator('input[type="number"]'),setField=i=>numbers(i).nth(0);
-  await setField(1).fill('1');
-  for(let i=1;i<count;i++){await table.getByRole('button',{name:`Copy row ${i}`,exact:true}).click();await setField(i+1).fill('1');}
-  assert.equal(await table.locator('tbody tr').count(),count);
-  assert.equal(await table.locator('input[aria-label$=" Reps"]').count(),count,'each actual strength set has a reps field');
-  assert.equal(await table.locator('input[aria-label$=" Load"]').count(),count,'each actual strength set has a load field');
-  assert.equal(await table.locator('input[aria-label$=" RPE (optional)"]').count(),count,'each strength set offers optional RPE');
-  for(let i=1;i<=count;i++){
-   await numbers(i).nth(1).fill(String(reps));
-   await numbers(i).nth(2).fill(String(loadStart+(i-1)*5));
-   if(i%2===0)await numbers(i).nth(3).fill('8');
-  }
+ async function fillIndividualSets(logger,count,reps,loadStart){
+  if(!(await logger.locator('.repeated-set-individual').evaluate(el=>el.open)))await logger.locator('.repeated-set-individual summary').click();const rows=logger.locator('.repeated-set-row');assert.equal(await rows.count(),count);
+  for(let i=1;i<=count;i++){const row=rows.nth(i-1);assert.equal(await row.getByRole('spinbutton',{name:/ Reps$/}).count(),1,'each actual set has its own reps input');assert.equal(await row.getByRole('spinbutton',{name:/ Load$/}).count(),1,'each actual set has its own load input');assert.equal(await row.getByRole('spinbutton',{name:/ RPE \(optional\)$/}).count(),1,'each actual set supports optional RPE');await row.getByLabel(`Set ${i} completed`,{exact:true}).check();await row.getByRole('spinbutton',{name:/ Reps$/}).fill(String(reps));await row.getByRole('spinbutton',{name:/ Load$/}).fill(String(loadStart+(i-1)*5));if(i%2===0)await row.getByRole('spinbutton',{name:/ RPE \(optional\)$/}).fill('8');}
  }
- await splitIntoSingleSetRows(frontTable,'Front Squat',5,3,185);
+ await fillIndividualSets(frontLogger,5,3,185);
  await workout.getByRole('button',{name:'Skip exercise',exact:true}).nth(1).click();
  await scoreField('Completed rounds').fill('5');await scoreField('Additional reps').fill('14');await workout.locator('label.field').filter({hasText:'RX / scaled'}).locator('select').selectOption('RX');
 
  // Coach changes the master after the athlete has opened and entered results.
  const changed=structuredClone(program),front=changed.plan[0].sessions[0].exercises[0];front.sets=6;front.reps=3;delete front.setBlocks;
  const sync=await api('programs','POST',changed);assert.equal(sync.status(),200,await sync.text());
- await workout.getByRole('button',{name:'Complete workout',exact:true}).click();await athletePage.getByRole('alert').filter({hasText:/coach updated this workout/i}).waitFor();
- assert.equal(await workout.locator('.grouped-sets').first().locator('tbody tr').first().locator('input[type="number"]').nth(2).inputValue(),'185','Stale-submit rejection retains the athlete’s entered set values.');
+ await workout.getByRole('button',{name:'Complete workout',exact:true}).click();await workout.getByRole('alert').filter({hasText:/coach updated this workout/i}).waitFor();
+ assert.equal(await workout.getByLabel('Front Squat row 1 Load',{exact:true}).inputValue(),'185','Stale-submit rejection retains the athlete’s entered set values.');
  await athletePage.keyboard.press('Escape');await athletePage.reload();await athletePage.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await athletePage.getByLabel('Current program',{exact:true}).selectOption(assignment.id);
  // The one-week template remains one week; the updated exercise prescription is what must refresh.
  await athletePage.getByRole('button',{name:'W1',exact:true}).click();await event().click();workout=athletePage.getByRole('dialog');await workout.getByText(/Target:\s*6\s*×\s*3/).waitFor();
- const refreshedTable=workout.locator('.grouped-sets').nth(0);await splitIntoSingleSetRows(refreshedTable,'Front Squat',6,3,195);
+ const refreshedLogger=workout.locator('.repeated-set-logger').first();await fillIndividualSets(refreshedLogger,6,3,195);
  await workout.getByRole('button',{name:'Skip exercise',exact:true}).nth(1).click();await scoreField('Completed rounds').fill('5');await scoreField('Additional reps').fill('14');await workout.locator('label.field').filter({hasText:'RX / scaled'}).locator('select').selectOption('RX');
  await workout.getByRole('button',{name:'Complete workout',exact:true}).click();await athletePage.getByRole('status').filter({hasText:'Partial workout saved'}).waitFor();
  data=await(await api('data')).json();let log=data.logs.find(l=>l.assignmentId===assignment.id&&l.week===1&&l.session===0);assert.ok(log);const originalId=log.id,originalDate=log.createdAt;assert.equal(log.status,'partially_completed');assert.equal(log.exercises[0].sets.length,6);assert.equal(log.exercises[0].sets[0].reps,3);assert.equal(log.exercises[0].sets[0].load,195);assert.equal(log.exercises[1].status,'skipped');assert.equal(log.blockResults[0].score.rounds,5);assert.equal(log.blockResults[0].score.reps,14);
@@ -93,7 +83,7 @@ test('Phase 2 mixed Strength + Metcon builder, athlete logging, skip/edit, progr
 
  // Reopen the original partial log and correct actual data in place.
  await event().click();const history=athletePage.getByRole('dialog');await history.getByRole('button',{name:'Resume / edit workout',exact:true}).click();workout=athletePage.getByRole('dialog');
- const editScore=name=>workout.locator('label.field').filter({hasText:name}).locator('input');await workout.locator('.grouped-sets').first().locator('tbody tr').first().locator('input[type="number"]').nth(2).fill('210');await editScore('Completed rounds').fill('6');await editScore('Additional reps').fill('2');
+ const editScore=name=>workout.locator('label.field').filter({hasText:name}).locator('input');await workout.getByLabel('Front Squat row 1 Load',{exact:true}).fill('210');await editScore('Completed rounds').fill('6');await editScore('Additional reps').fill('2');
  await workout.getByRole('button',{name:'Save corrections',exact:true}).click();await athletePage.getByRole('status').filter({hasText:'Workout corrections saved'}).waitFor();
  data=await(await api('data')).json();log=data.logs.find(l=>l.id===originalId);assert.equal(data.logs.filter(l=>l.assignmentId===assignment.id&&l.week===1&&l.session===0).length,1);assert.equal(log.createdAt,originalDate);assert.equal(log.assignmentId,assignment.id);assert.equal(log.status,'partially_completed');assert.equal(log.exercises[0].sets[0].load,210);assert.equal(log.exercises[1].status,'skipped');assert.equal(log.blockResults[0].score.rounds,6);assert.equal(log.blockResults[0].score.reps,2);
 

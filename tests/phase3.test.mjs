@@ -43,6 +43,13 @@ test('Ask Iron Heart exact rep queries only use actual sets with that rep count 
  assert.equal(result.evidence[0].exercise,'Power Clean');assert.equal(result.evidence[0].actualLoad,185);assert.equal(result.evidence[0].reps,3);assert.equal(result.evidence[0].date,'2026-10-18');assert.deepEqual(result.evidence[0].source,{type:'workout_log_set',workoutLogId:'clean-triple',exerciseId:'power-clean',setIndex:0});assert.equal(result.evidence[0].estimated1RM,false);assert.match(result.answer,/3-rep Power Clean.*185 lbs for 3 reps on 2026-10-18/);assert.equal(result.deterministic,true);
 });
 
+test('Ask AI treats 3RM, three-rep max and best triple as the same exact-rep request',()=>{
+ const history=[{id:'clean-single',workoutDate:'2026-10-20',sessionName:'Clean singles',exercises:[{exerciseId:'power-clean',sets:[{load:200,loadUnit:'lbs',reps:1}]}]},{id:'clean-triple',workoutDate:'2026-10-18',sessionName:'Clean triples',exercises:[{exerciseId:'power-clean',sets:[{load:185,loadUnit:'lbs',reps:3}]}]}],exercises=[...library,{id:'power-clean',name:'Power Clean',trackingType:'strength'}];
+ for(const question of ['What is my 3 rep max on power clean?','What is my three-rep max on power clean?','What is my 3RM for power clean?','What is my best triple on power clean?']){
+  const result=analyzeTrainingQuestion({question,logs:history,library:exercises});assert.equal(result.evidence[0].kind,'actual_set',question);assert.equal(result.evidence[0].reps,3,question);assert.equal(result.evidence[0].actualLoad,185,question);assert.equal(result.evidence[0].date,'2026-10-18',question);
+ }
+});
+
 test('exact-rep questions state when no matching actual record exists and never fall back to another rep count or PR',()=>{
  const result=analyzeTrainingQuestion({question:'What is my heaviest 3-rep Power Clean?',logs:[{id:'single-only',workoutDate:'2026-10-20',exercises:[{exerciseId:'power-clean',target:{load:250,reps:3},sets:[{load:200,loadUnit:'lbs',reps:1}]}]}],library:[...library,{id:'power-clean',name:'Power Clean',trackingType:'strength'}]});
  assert.equal(result.evidence[0].kind,'insufficient_data');assert.equal(result.evidence[0].requestedRepCount,3);assert.match(result.answer,/could not find a completed Power Clean set with exactly 3 reps/);assert.doesNotMatch(result.answer,/200|1 rep/);assert.equal(result.deterministic,true);

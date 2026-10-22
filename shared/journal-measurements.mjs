@@ -35,6 +35,7 @@ export function prepareJournalEntry(entry,exercise,library){
   if(!strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10))throw Error('Check optional cardio RPE 1–10.');if(CARDIO_TYPES.includes(trackingType)){const computed=calculatedCardioMetrics(out,trackingType);if(computed.paceUnit&&(s.paceUnit!=null||out.paceSeconds==null))out.paceUnit=computed.paceUnit;for(const k of ["paceSeconds","speedMph"])if(out[k]==null&&computed[k]!=null)out[k]=+computed[k].toFixed(6);}}
 
   if(s.completed!=null){if(typeof s.completed!=='boolean')throw Error('Check interval completion.');out.completed=s.completed;}
+  if(s.prescriptionIndex!=null){if(!Number.isInteger(s.prescriptionIndex)||s.prescriptionIndex<0||s.prescriptionIndex>=30)throw Error('Check prescription set order.');out.prescriptionIndex=s.prescriptionIndex;}
   if(s.recoverySeconds!=null){if(!optional(s.recoverySeconds,0,3600))throw Error('Check actual recovery (0–3600 seconds).');out.recoverySeconds=s.recoverySeconds;}
   if(s.blockIndex!=null)out.blockIndex=s.blockIndex;
   return out;

@@ -12,7 +12,7 @@ export function toIronHeartProgram(review,library,requirements={}){
   const program=structuredClone(review.draft.program);
   if(review.draft.schemaVersion===2)for(const week of program.plan)week.sessions=week.sessions.map(conditioningSession);
   for(const week of program.plan)for(const session of week.sessions)for(const e of session.exercises){
-    if(e.loadMode===LOAD_MODE.PERCENTAGE)e.load=percentageLoad(e,library);
+    if(!e.trackingType&&e.loadMode===LOAD_MODE.PERCENTAGE)e.load=percentageLoad(e,library);
   }
   // One Week 1 object in memory. JSON serialization creates a derived compatibility
   // projection; plan[0] remains authoritative when the save adapter is implemented.

@@ -1,5 +1,6 @@
 import {AI_DRAFT_SCHEMA,EXERCISE_SCHEMA,SESSION_SCHEMA} from './contract.mjs';
 import {CARDIO_TYPES} from '../tracking.mjs';
+import {MOVEMENT_TYPES} from '../movement-prescriptions.mjs';
 import {SCORE_TYPES,BLOCK_TYPES} from '../workout-blocks.mjs';
 const num=(max=86400)=>({type:['number','null'],minimum:0,maximum:max});
 const txt={type:'string',maxLength:2000};
@@ -8,6 +9,7 @@ const obj=(properties,required=Object.keys(properties))=>({type:'object',propert
 const id={type:['string','null'],maxLength:200};
 const distanceUnit={type:['string','null'],enum:[null,'m','km','mi','yd']};
 export const CARDIO_EXERCISE_SCHEMA=obj({exerciseId:id,exerciseName:{type:'string',minLength:1,maxLength:200},trackingType:{type:'string',enum:CARDIO_TYPES},intervalCount:{type:['integer','null'],minimum:1,maximum:30},restSeconds:num(3600),metrics:obj({distance:num(1000000),distanceUnit,paceUnit:{type:['string','null'],enum:[null,'mi','km']},durationSeconds:num(),paceSeconds:num(),speedMph:num(60),watts:num(10000),cadence:num(500),calories:num(100000),incline:num(100),level:num(100),steps:num(1000000),floors:num(10000),rpe:num(10)},[]),notes:optionalText,progressionInstructions:optionalText},['exerciseId','exerciseName','trackingType','metrics']);
+export const MOVEMENT_EXERCISE_SCHEMA=obj({exerciseId:id,exerciseName:{type:'string',minLength:1,maxLength:200},trackingType:{type:'string',enum:MOVEMENT_TYPES},sets:{type:['integer','null'],minimum:1,maximum:12},rest:num(600),metrics:obj({durationSeconds:num(),load:num(1200),loadUnit:{type:['string','null'],enum:[null,'lbs','kg']},distance:num(1000000),distanceUnit,rpe:num(10)},[]),loadMode:{type:'string',enum:['fixed','percentage','bodyweight','athlete_selected','none']},percent1RM:num(100),referenceExerciseId:id,referenceExerciseName:optionalText,notes:optionalText,progressionInstructions:optionalText},['exerciseId','exerciseName','trackingType','sets','rest','metrics','loadMode','percent1RM','referenceExerciseId','referenceExerciseName','notes','progressionInstructions']);
 export const METCON_MOVEMENT_SCHEMA=obj({exerciseId:id,exerciseName:{type:'string',minLength:1,maxLength:200},reps:num(10000),distance:num(1000000),distanceUnit,calories:num(10000),load:num(10000),loadUnit:{type:['string','null'],enum:[null,'lbs','kg']},minute:num(10000),notes:optionalText},['exerciseId','exerciseName']);
 const option=structuredClone(METCON_MOVEMENT_SCHEMA);option.properties.repScheme={type:['array','null'],maxItems:100,items:{type:'integer',minimum:1,maximum:10000}};
 METCON_MOVEMENT_SCHEMA.properties.scalingOptions={type:['array','null'],maxItems:10,items:option};
@@ -17,7 +19,7 @@ export const AI_DRAFT_SCHEMA_V2=structuredClone(AI_DRAFT_SCHEMA);
 AI_DRAFT_SCHEMA_V2.title='Iron Heart AI Workout Draft v2';
 AI_DRAFT_SCHEMA_V2.properties.schemaVersion={const:2};
 const session=structuredClone(SESSION_SCHEMA);
-session.properties.exercises={type:'array',minItems:0,maxItems:15,items:{anyOf:[EXERCISE_SCHEMA,CARDIO_EXERCISE_SCHEMA]}};
+session.properties.exercises={type:'array',minItems:0,maxItems:15,items:{anyOf:[EXERCISE_SCHEMA,CARDIO_EXERCISE_SCHEMA,MOVEMENT_EXERCISE_SCHEMA]}};
 session.properties.blocks={type:'array',maxItems:20,items:BLOCK_SCHEMA};
 session.required.push('blocks');
 AI_DRAFT_SCHEMA_V2.properties.program.properties.plan.items.properties.sessions.items=session;

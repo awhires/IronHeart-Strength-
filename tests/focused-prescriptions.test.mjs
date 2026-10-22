@@ -45,7 +45,7 @@ test('legacy plank breaths are preserved and never guessed as duration',()=>{
 });
 test('timed prescriptions validate sets and actual durations without cardio interval rules',()=>{
  const library=[{id:'plank',name:'Forearm Plank'}],target={exerciseId:'plank',trackingType:'timed',sets:3,metrics:{durationSeconds:30},rest:60};
- assert.match(prescriptionText(target),/3 sets.*0:30/);assert.doesNotThrow(()=>prepareSession({name:'Hold',day:1,exercises:[target]},library));
+ assert.match(prescriptionText(target),/3 × 0:30/);assert.doesNotThrow(()=>prepareSession({name:'Hold',day:1,exercises:[target]},library));
  assert.throws(()=>prepareSession({name:'Hold',day:1,exercises:[{...target,sets:0}]},library),/Sets/);
  assert.throws(()=>recordPerformance([{exerciseId:'plank',sets:[{durationSeconds:30}]}],[target],library),/every prescribed/);
  assert.throws(()=>recordPerformance([{exerciseId:'plank',sets:[{durationSeconds:0},{durationSeconds:30},{durationSeconds:30}]}],[target],library),/positive duration/);

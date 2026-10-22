@@ -51,7 +51,15 @@ export function loadText(item){
 }
 export function prescriptionText(item){
   const e=movementPrescription(item)||normalizePrescription(item);
-  if(e.trackingType&&e.trackingType!=='strength')return CARDIO_TYPES.includes(e.trackingType)?cardioTargetText(e):`${e.sets??1} sets · ${e.metrics?.durationSeconds||e.metrics?.distance?setSummary(e.metrics,e.trackingType):'Duration not specified'+(e.reps!=null?' (legacy '+e.reps+' reps/breaths preserved)':'')}`;
+  if(e.trackingType&&e.trackingType!=='strength'){
+    if(CARDIO_TYPES.includes(e.trackingType))return cardioTargetText(e);
+    if(MOVEMENT_TYPES.includes(e.trackingType)){
+      const count=e.sets??1,measure=e.metrics?.durationSeconds!=null?setSummary({durationSeconds:e.metrics.durationSeconds},e.trackingType):e.metrics?.distance!=null?setSummary(e.metrics,e.trackingType):`Duration not specified${e.reps!=null?' (legacy '+e.reps+' reps/breaths preserved)':''}`;
+      const load=e.loadMode===L.PERCENTAGE?`${e.percent1RM}% of ${e.referenceExerciseName||'reference lift'} 1RM`:e.loadMode===L.FIXED&&e.metrics?.load!=null?`${e.metrics.load} ${unitLabel(e.metrics.loadUnit)}`:e.trackingType==='loadedTimed'?'Load athlete-selected':null;
+      return [`${count} × ${measure}`,load,e.metrics?.rpe!=null?`RPE ${e.metrics.rpe}`:null,e.rest==null?null:`${e.rest}s rest`].filter(Boolean).join(' · ');
+    }
+    return `${e.sets??1} sets · Duration not specified`;
+  }
   if(e.setBlocks?.length)return e.setBlocks.map(b=>prescriptionText({...e,...b,sets:b.sets??b.count,setBlocks:undefined})).join(' + ');
   return [e.sets==null?'Sets not prescribed':`${e.sets} × ${e.repMode==='max'?'Max Reps':e.reps==null?'reps open':e.reps}`,e.referenceLoad?`${e.referenceLoad.percent}% of ${e.referenceLoad.exerciseName} 1RM`:loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,e.rest==null?null:`${e.rest}s rest`].filter(Boolean).join(' · ');
 }
@@ -62,7 +70,28 @@ export function validatePrescription(item,library){
   if(!object(item))return [{severity:'error',message:'Invalid exercise prescription.'}];
   try{validateAdaptiveRule(item.adaptiveProgression);}catch(e){return [{severity:'error',message:e.message}];}
   if(item.trackingType&&item.trackingType!=='strength'){
-    try{const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');if(CARDIO_TYPES.includes(item.trackingType))validateCardioPrescription(item,library);else {if(!Number.isInteger(item.sets??1)||(item.sets??1)<1||(item.sets??1)>12)throw Error('Sets must be 1–12.');prepareJournalEntry({exerciseId:item.exerciseId,sets:[item.metrics||{}]},exercise,library);}return [];}catch(e){return [{severity:'error',message:e.message}];}
+    try{
+      const exercise=library.find(x=>x.id===item.exerciseId);if(!exercise||trackingProfile(exercise)!==item.trackingType)throw Error('Choose a matching exercise profile.');
+      if(CARDIO_TYPES.includes(item.trackingType))validateCardioPrescription(item,library);
+      else if(MOVEMENT_TYPES.includes(item.trackingType)){
+        const m=item.metrics||{},mode=item.loadMode||(typeof m.load==='number'?'fixed':'athlete_selected');
+        if(!Number.isInteger(item.sets??1)||(item.sets??1)<1||(item.sets??1)>12)throw Error('Sets must be 1–12.');
+        if(item.trackingType!=='carry'&&(!range(m.durationSeconds,1,86400)))throw Error('Enter a positive duration in seconds.');
+        if(item.trackingType==='carry'&&(!range(m.distance,Number.MIN_VALUE,1000000)||!['m','km','mi','yd'].includes(m.distanceUnit)))throw Error('Enter a valid carry distance and unit.');
+        if(!['fixed','percentage','bodyweight','athlete_selected','none'].includes(mode))throw Error('Choose a supported load mode.');
+        if(item.trackingType!=='timed'){
+          if(mode==='percentage'){
+            const reference=library.find(x=>x.id===item.referenceExerciseId);
+            if(!range(item.percent1RM,1,100)||!reference||trackingProfile(reference)!=='strength'||reference.name!==item.referenceExerciseName)throw Error('Choose a valid strength reference exercise and percentage.');
+            if(m.load!=null)throw Error('Percentage targets keep the actual load blank; the athlete load is calculated from their reference-lift history.');
+          }else if(mode==='fixed'){
+            if(!range(m.load,Number.MIN_VALUE,1200)||!Object.values(LOAD_UNIT).includes(m.loadUnit)||inPounds(m.load,m.loadUnit)>1200)throw Error('Enter a valid fixed movement load and unit.');
+          }else if(m.load!=null&&m.load!==0)throw Error('Athlete-selected or no-load targets cannot contain a prescribed external load.');
+        }
+        if(m.rpe!=null&&!range(m.rpe,1,10))throw Error('Optional RPE must be 1–10.');
+      }else throw Error('Choose a supported exercise measurement profile.');
+      return [];
+    }catch(e){return [{severity:'error',message:e.message}];}
   }
   const e=normalizePrescription(item),findings=[];
   const check=(ok,message)=>{if(!ok)findings.push({severity:'error',message});};
@@ -132,16 +161,29 @@ export function recordPerformance(entries,targets,library=[]){
     const target=((MOVEMENT_TYPES.includes(targets[i].trackingType)||entry.sets?.some(s=>s.durationSeconds!=null||s.distance!=null))?movementPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId)):null)||cardioPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId))||normalizePrescription(targets[i]);
     if(entry.exerciseId!==targets[i].exerciseId)throw Error('Exercise mismatch.');
     if(entry.skipped===true){if(typeof(entry.skipReason??'')!=='string'||(entry.skipReason||'').length>500)throw Error('Skip reason must be 500 characters or fewer.');return {exerciseId:entry.exerciseId,status:'skipped',...(entry.skipReason?{skipReason:entry.skipReason}:{}),target};}
-    if(target.trackingType&&target.trackingType!=='strength'){if(entry.sets?.length!==(MOVEMENT_TYPES.includes(target.trackingType)?target.sets:prescribedCardioIntervals(target).length))throw Error('Complete every prescribed interval.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
-    if(entry.exerciseId!==target.exerciseId||!Array.isArray(entry.sets)||(entry.actualSetGroups===true?(entry.sets.length<1||entry.sets.length>30):target.sets==null?(entry.sets.length<1||entry.sets.length>30):entry.sets.length!==target.sets))throw Error('Complete every prescribed set.');
+    if(target.trackingType&&target.trackingType!=='strength'){
+      if(MOVEMENT_TYPES.includes(target.trackingType)){
+        const expected=target.sets??1,performed=(entry.sets||[]).filter(s=>s.completed!==false);
+        if(!Array.isArray(entry.sets)||!performed.length||performed.length>expected||(entry.actualSetGroups!==true&&performed.length!==expected))throw Error('Complete every prescribed set or use Apply to All Sets with the completed count.');
+        const indexes=performed.map((s,j)=>s.prescriptionIndex??j);if(indexes.some(index=>!Number.isInteger(index)||index<0||index>=expected)||new Set(indexes).size!==indexes.length)throw Error('Check each completed set position.');
+        const exercise=library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType};
+        const recorded=prepareJournalEntry({...entry,sets:performed},{...exercise,trackingType:target.trackingType},library);
+        return {...recorded,target,...(performed.length<expected?{status:'partially_completed'}:{})};
+      }
+      if(entry.sets?.length!==prescribedCardioIntervals(target).length)throw Error('Complete every prescribed interval.');
+      return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};
+    }
+    const performed=(entry.sets||[]).filter(s=>s.completed!==false);
+    if(entry.exerciseId!==target.exerciseId||!Array.isArray(entry.sets)||(entry.actualSetGroups===true?(performed.length<1||performed.length>30||target.sets!=null&&performed.length>target.sets):target.sets==null?(performed.length<1||performed.length>30):performed.length!==target.sets))throw Error('Complete every prescribed set or use Apply to All Sets with the completed count.');
     const perSet=prescribedSets(target);
-    const sets=entry.sets.map((s,j)=>{
-      const setTarget=perSet[j]||target,unit=s.loadUnit??setTarget.loadUnit;
+    const indexes=performed.map((s,j)=>s.prescriptionIndex??j);if(indexes.some(index=>!Number.isInteger(index)||index<0||index>=(target.sets??30))||new Set(indexes).size!==indexes.length)throw Error('Check each completed set position.');
+    const sets=performed.map((s,j)=>{
+      const prescriptionIndex=indexes[j],setTarget=perSet[prescriptionIndex]||target,unit=s.loadUnit??setTarget.loadUnit;
       const actualRpe=s.rpe??null;
-      if(!Object.values(LOAD_UNIT).includes(unit)||!range(s.load,0,1200)||inPounds(s.load,unit)>1200||!Number.isInteger(s.reps)||!range(s.reps,0,100)||(actualRpe!==null&&!range(actualRpe,1,10))||(setTarget.effortMode===E.RPE&&setTarget.rpe!==null&&actualRpe===null))throw Error('Complete each set with actual weight, reps, and a valid effort value.');
-      return {load:s.load,loadUnit:unit,reps:s.reps,rpe:actualRpe};
+      if(!Object.values(LOAD_UNIT).includes(unit)||!range(s.load,0,1200)||inPounds(s.load,unit)>1200||!Number.isInteger(s.reps)||!range(s.reps,0,100)||(actualRpe!==null&&!range(actualRpe,1,10)))throw Error('Complete each set with actual weight, reps, and a valid optional effort value.');
+      return {load:s.load,loadUnit:unit,reps:s.reps,rpe:actualRpe,prescriptionIndex};
     });
-    return {exerciseId:entry.exerciseId,sets,target};
+    return {exerciseId:entry.exerciseId,sets,target,...(target.sets!=null&&sets.length<target.sets?{status:'partially_completed'}:{})};
   });
 }
 export function normalizeData(data){
