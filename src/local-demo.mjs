@@ -5,6 +5,7 @@ import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,weekdayDate} fr
 import {missingConditioningExercises,missingSingleUnders} from '../shared/conditioning-library.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
 import {missingTrackingExercises} from '../shared/tracking.mjs';
+import {repeatProgramInstance,completedProgram,benchmarkDefinitions,analyzeTrainingQuestion} from '../shared/phase3.mjs';
 // Device-only preview. No remote accounts or synchronization are implied.
 import {prepareTrackerWorkout} from '../shared/workout-tracker.mjs';
 import { exercises, programs } from '../server/seed.mjs';
@@ -16,7 +17,7 @@ import {LIBRARY_UPDATE,missingLibraryExercises,missingStrengthProgressExercises}
 const KEY='iron-heart-phone-preview-v1';
 const clone=value=>structuredClone(value);
 const id=()=>crypto.randomUUID();
-function assignment(p,athleteId,startDate){return {id:id(),athleteId,programId:p.id,name:p.name,goal:p.goal,coachNotes:p.coachNotes,progressionInstructions:p.progressionInstructions,aiProvenance:clone(p.aiProvenance),weeks:p.weeks,startDate,progressionOptions:clone(p.progressionOptions),plan:p.plan?clone(p.plan):Array.from({length:p.weeks},(_,i)=>({week:i+1,sessions:p.sessions.map(s=>({...clone(s),exercises:s.exercises.map(e=>periodize(e,i+1,p.weeks))}))}))};}
+function assignment(p,athleteId,startDate){return {id:id(),athleteId,programId:p.id,name:p.name,goal:p.goal,coachNotes:p.coachNotes,progressionInstructions:p.progressionInstructions,aiProvenance:clone(p.aiProvenance),weeks:p.weeks,startDate,repeatable:p.repeatable!==false,benchmarkType:p.benchmarkType||'none',progressionOptions:clone(p.progressionOptions),plan:p.plan?clone(p.plan):Array.from({length:p.weeks},(_,i)=>({week:i+1,sessions:p.sessions.map(s=>({...clone(s),exercises:s.exercises.map(e=>periodize(e,i+1,p.weeks))}))}))};}
 function seed(){
   const templates=clone(programs);
   templates.forEach(p=>p.sessions.forEach(s=>s.exercises.forEach(e=>{e.load=toPounds(e.load);e.increment=toPounds(e.increment);})));
@@ -60,7 +61,8 @@ export function createLocalDemo(storage){
     else if(['login','redeem','invite'].includes(route))throw Error('Live sign-in and invitations require the hosted version. This preview saves only on this phone.');
     else{
       if(!user)throw Error('Choose Coach view or Athlete view.');
-      if(route==='data')result={user,demo:true,standalone:true,exercises:state.exercises,programs:user.role==='coach'?state.programs:[],discover:user.role==='athlete'?state.programs.filter(p=>discoverable(p,user.id)).map(({discover,...p})=>p):[],athletes:user.role==='coach'?state.athletes:[],assignments:state.assignments.filter(a=>user.role==='coach'||a.athleteId===user.id),strengthGoals:state.strengthGoals.filter(g=>user.role==='coach'||g.athleteId===user.id),strengthPRs:state.strengthPRs.filter(g=>user.role==='coach'||g.athleteId===user.id),logs:state.logs.filter(l=>user.role==='coach'||l.athleteId===user.id)};
+      if(route==='data'){const assignments=state.assignments.filter(a=>user.role==='coach'||a.athleteId===user.id);result={user,demo:true,standalone:true,exercises:state.exercises,programs:user.role==='coach'?state.programs:[],discover:user.role==='athlete'?state.programs.filter(p=>discoverable(p,user.id)).map(({discover,...p})=>p):[],athletes:user.role==='coach'?state.athletes:[],assignments,strengthGoals:state.strengthGoals.filter(g=>user.role==='coach'||g.athleteId===user.id),strengthPRs:state.strengthPRs.filter(g=>user.role==='coach'||g.athleteId===user.id),logs:state.logs.filter(l=>user.role==='coach'||l.athleteId===user.id),benchmarks:benchmarkDefinitions(user.role==='coach'?state.programs:[],assignments)};}
+      else if(route==='ask-ai'&&method==='POST'){const athleteId=user.role==='coach'?b.athleteId:user.id;if(!state.athletes.some(a=>a.id===athleteId))throw Error('Choose an athlete to ask about.');result=analyzeTrainingQuestion({question:b.question,logs:state.logs.filter(l=>l.athleteId===athleteId),library:state.exercises,assignments:state.assignments.filter(a=>a.athleteId===athleteId),timeZone:b.timeZone||'UTC'});}
       else if(route==='strength-goal'&&method==='POST'){const athleteId=b.athleteId||user.id;if(user.role!=='coach'&&athleteId!==user.id)throw Error('Access denied.');if(!state.athletes.some(a=>a.id===athleteId))throw Error('Athlete not found.');result=save('strengthGoals',prepareStrengthGoal(b,state.exercises,athleteId));}
       else if(route==='strength-pr'&&method==='POST'){if(user.role!=='athlete')throw Error('Athlete access required.');const previous=b.id&&state.strengthPRs.find(p=>p.id===b.id);if(b.id&&previous?.athleteId!==user.id)throw Error('Manual PR not found.');result=save('strengthPRs',prepareStrengthPR(b,state.exercises,user.id));}
       else if(['enrollment-preview','enroll'].includes(route)&&method==='POST'){
@@ -95,6 +97,8 @@ export function createLocalDemo(storage){
         coach();const p=state.programs.find(p=>p.id===b.programId);
         if(!p||!state.athletes.some(a=>a.id===b.athleteId)||!/^\d{4}-\d{2}-\d{2}$/.test(b.startDate))throw Error('Choose a program, athlete, and start date.');
         const a={...assignment(p,b.athleteId,b.startDate),description:p.description,modality:p.modality,level:p.level};if(b.requireSetup===true||b.requireSetup==='on')a.enrollment={source:'coach',status:'pending'};result=save('assignments',a);
+      }else if(route==='repeat-program'&&method==='POST'){
+        if(user.role!=='athlete')throw Error('Athlete access required.');const source=state.assignments.find(a=>a.id===b.assignmentId&&a.athleteId===user.id);if(!source)throw Error('Program not found.');if(state.assignments.some(a=>a.athleteId===user.id&&a.programId===source.programId&&a.id!==source.id&&!completedProgram(a,state.logs)))throw Error('This athlete already has an active attempt of this program. Finish it before starting another.');const next=repeatProgramInstance(source,{id:id(),startDate:b.startDate},state.logs);const dates=new Set(next.plan.flatMap(w=>w.sessions.map(s=>s.day)));for(const other of state.assignments.filter(a=>a.athleteId===user.id&&a.id!==source.id&&!completedProgram(a,state.logs)))if(other.plan.some(w=>w.sessions.some(s=>dates.has(s.day))))throw Error('Repeating this program may overlap another active schedule. Choose a different start date or adjust the other program.');result=save('assignments',next);
       }else if(['assignment','reschedule','session-status'].includes(route)){
         coach();const {a,s}=session();
         if(route==='assignment'){Object.assign(s,prepareSession({...s,exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},state.exercises));s.prescriptionRevision=(s.prescriptionRevision||0)+1;}
@@ -103,8 +107,9 @@ export function createLocalDemo(storage){
         result=a;
       }else if(route==='tracker'&&method==='POST'){
         if(user.role!=='athlete')throw Error('Open Athlete view to journal a workout.');
-        const workout=prepareTrackerWorkout(b,state.exercises);
-        result=save('logs',{...workout,id:id(),athleteId:user.id,createdAt:new Date().toISOString()});
+        if(b.repeatOfLogId&&!state.logs.some(l=>l.id===b.repeatOfLogId&&l.athleteId===user.id))throw Error('Original workout was not found.');
+        const {repeatOfLogId,...payload}=b;const workout=prepareTrackerWorkout(payload,state.exercises);
+        result=save('logs',{...workout,id:id(),athleteId:user.id,createdAt:new Date().toISOString(),...(b.repeatOfLogId?{repeatOfLogId:b.repeatOfLogId}:{})});
       }else if(route==='log'&&method==='POST'){
         if(user.role!=='athlete')throw Error('Open Athlete view to log a workout.');
         const {a,s}=session();if(a.enrollment?.status==='pending')throw Error('Confirm your program schedule before logging.');if(s.cancelled)throw Error('This session is removed from the calendar.');

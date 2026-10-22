@@ -112,6 +112,8 @@ export function prepareProgram(input,library){
   // remain separately enforced by the AI contract and review flow.
   const validWeeks=Number.isInteger(p?.weeks)&&p.weeks>=1&&p.weeks<=12;
   if(!object(p)||!text(p.name,1,200)||!text(p.goal,1,200)||!validWeeks||!text(p.description??''))throw Error('Provide a program name, goal and supported block length.');
+  if(p.repeatable!==undefined&&typeof p.repeatable!=='boolean')throw Error('Program repeat availability must be enabled or disabled.');
+  if(p.benchmarkType!==undefined&&!['none','benchmark','assessment','reference'].includes(p.benchmarkType))throw Error('Choose a valid benchmark classification.');
   for(const k of ['coachNotes','progressionInstructions'])if(p[k]!==undefined&&!text(p[k]))throw Error('Program notes must be text.');
   const sessions=value=>{
     if(!Array.isArray(value)||value.length<1||value.length>7)throw Error('Use 1–7 sessions per week.');

@@ -5,7 +5,7 @@ import {trackingProfile} from '../shared/tracking.mjs';
 import './strength-progress.css';
 const amount=n=>n.toLocaleString(undefined,{maximumFractionDigits:1});
 const localDateInputValue=(date=new Date())=>{const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,10);};
-export default function StrengthProgress({data,onSaveGoal,onSavePR,onDeletePR,onSession,onAnalytics}){
+export default function StrengthProgress({data,onSaveGoal,onSavePR,onDeletePR,onSession,onAnalytics,onAskAI}){
  const coach=data.user.role==='coach',library=data.exercises.filter(e=>trackingProfile(e)==='strength');
  const [athlete,setAthlete]=useState(coach?data.athletes[0]?.id||'':data.user.id),[exercise,setExercise]=useState(library[0]?.id||''),[repMax,setRepMax]=useState(1),[now,setNow]=useState(()=>new Date()),[goalOpen,setGoalOpen]=useState(false),[prOpen,setPrOpen]=useState(false),[editingPR,setEditingPR]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
  useEffect(()=>{const refresh=()=>setNow(new Date()),timer=setInterval(refresh,60000);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};},[]);
@@ -14,7 +14,7 @@ export default function StrengthProgress({data,onSaveGoal,onSavePR,onDeletePR,on
  const selected=library.find(e=>e.id===exercise),actual=stats.actualBests[repMax];
  const prior=points.filter(p=>p.month!==window[2].key).at(-1),change=stats.current&&prior?stats.current.estimates[repMax]-prior.estimates[repMax]:null;
  const current=stats.current,previous=points.filter(p=>p.month!==window[2].key).at(-1);
- return <section className="strength-page compact-progress"><div className="page-heading"><h1>Goals & Progress</h1></div>
+ return <section className="strength-page compact-progress"><div className="page-heading"><h1>Goals & Progress</h1><div className="tabs progress-hub-tabs" aria-label="Progress sections"><button className="active" aria-current="page">Strength</button><button onClick={onAnalytics}>Cardio & Hybrid</button><button onClick={onAskAI}>Ask AI</button></div></div>
  {coach&&<label className="field progress-athlete"><span>Athlete</span><select aria-label="Athlete" value={athlete} onChange={e=>{setAthlete(e.target.value);setMessage('');setGoalOpen(false);}}>{data.athletes.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
  <section className="panel progress-primary" aria-label="Strength progress overview">
  <header className="progress-card-heading"><label className="progress-exercise"><span className="sr-only">Strength exercise</span><select aria-label="Strength exercise" value={exercise} onChange={e=>{setExercise(e.target.value);setMessage('');setGoalOpen(false);}}>{library.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></label><h3>{current?.kind==='manual'&&current.performance.reps===repMax?`Manual ${repMax}RM / NSCA equivalents`:'Estimated Max — NSCA Training Load Chart'}</h3></header>
