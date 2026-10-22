@@ -12,6 +12,58 @@ const validZone=value=>{try{new Intl.DateTimeFormat('en-US',{timeZone:value});re
 const round=(value,n=2)=>Number(value.toFixed(n));
 const dateFor=log=>workoutDate(log)||log.createdAt?.slice(0,10)||'';
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const dateKey=(date)=>date.toISOString().slice(0,10);
+const moveDate=(value,days)=>{const date=new Date(`${value}T12:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return dateKey(date);};
+
+function dateWindow(question,timeZone,now){
+  const q=norm(question),today=dayKey(now,validZone(timeZone));
+  const range=String(question).match(/\b(?:between|from)\s+(\d{4}-\d{2}-\d{2})\s+(?:and|to|through)\s+(\d{4}-\d{2}-\d{2})\b/i);
+  if(range&&range[1]<=range[2])return {start:range[1],end:moveDate(range[2],1),label:`${range[1]} through ${range[2]}`};
+  const onDate=String(question).match(/\bon\s+(\d{4}-\d{2}-\d{2})\b/i);
+  if(onDate)return {start:onDate[1],end:moveDate(onDate[1],1),label:onDate[1]};
+  if(/\b(?:last|this) week\b/.test(q)){
+    const mondayOffset=(new Date(`${today}T12:00:00Z`).getUTCDay()+6)%7;
+    const currentMonday=moveDate(today,-mondayOffset),start=q.includes('last week')?moveDate(currentMonday,-7):currentMonday;
+    return {start,end:moveDate(start,7),label:q.includes('last week')?'last week':'this week'};
+  }
+  return null;
+}
+
+function findExercise(question,library){
+  const q=norm(question),qWords=new Set(q.split(' '));
+  return library.map(exercise=>{
+    const name=norm(exercise.name),words=name.split(' '),matched=words.filter(word=>qWords.has(word)).length;
+    const exactPhrase=q===name||q.includes(` ${name} `)||q.startsWith(`${name} `)||q.endsWith(` ${name}`);
+    const runningMention=trackingProfile(exercise)==='running'&&/\b(run|running|mile|miles|mi|5k|10k)\b/.test(q);
+    const score=exactPhrase?10000+words.length:matched?matched*100-words.length+(runningMention?10:0):runningMention?10:0;
+    return {exercise,score,nameLength:words.length};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.nameLength-b.nameLength||norm(a.exercise.name).localeCompare(norm(b.exercise.name)))[0]?.exercise;
+}
+
+function exactRepCount(question){
+  const match=norm(question).match(/\b(\d+)\s*(?:rep|reps|repetition|repetitions)\b/);
+  return match?Number(match[1]):null;
+}
+
+function requestedDistance(question){
+  const q=norm(question);
+  const shortDistance=q.match(/\b(5k|10k)\b/);
+  if(shortDistance)return shortDistance[1]==='5k'?{meters:5000,unitMeters:1000,value:5,label:'5 km'}:{meters:10000,unitMeters:1000,value:10,label:'10 km'};
+  const match=q.match(/\b(5k|10k|\d+(?:\.\d+)?)\s*(mile|miles|mi|kilometer|kilometers|kilometre|kilometres|km|meter|meters|metre|metres|m|yard|yards|yd)\b/);
+  if(!match){
+    const unitOnly=q.match(/\b(mile|miles|mi|kilometer|kilometers|kilometre|kilometres|km|meter|meters|metre|metres|yard|yards|yd)\b/);
+    if(!unitOnly)return null;
+    const unit=unitOnly[1],unitMeters=/^mi|^mile/.test(unit)?1609.344:/^k/.test(unit)?1000:/^y|^yd/.test(unit)?.9144:1;
+    return {meters:unitMeters,unitMeters,value:1,label:/^mi|^mile/.test(unit)?'1 mile':/^k/.test(unit)?'1 km':/^y|^yd/.test(unit)?'1 yard':'1 meter'};
+  }
+  if(match[1]==='5k')return {meters:5000,unitMeters:1000,value:5,label:'5 km'};
+  if(match[1]==='10k')return {meters:10000,unitMeters:1000,value:10,label:'10 km'};
+  const value=Number(match[1]),unit=match[2];
+  const unitMeters=/^mi|^mile/.test(unit)?1609.344:/^k/.test(unit)?1000:/^y|^yd/.test(unit)?.9144:/^m|^met/.test(unit)?1:0;
+  if(!unitMeters)return null;
+  const label=/^mi|^mile/.test(unit)?'miles':/^k/.test(unit)?'km':/^y|^yd/.test(unit)?'yards':'meters';
+  return {meters:value*unitMeters,unitMeters,value,label:`${value} ${label}`};
+}
 
 export function completedProgram(assignment,logs){
   if(!assignment?.id||!Array.isArray(assignment.plan))return false;
@@ -49,8 +101,10 @@ export function benchmarkDefinitions(programs=[],assignments=[]){
 
 function evidenceFromQuestion(question,logs,library,timeZone,now,assignments=[]){
   const q=norm(question),zone=validZone(timeZone),owned=logs.filter(l=>l.status!=='skipped').slice(-500),evidence=[];
-  const dated=owned.map(l=>({log:l,date:dayKey(dateFor(l),zone)})).sort((a,b)=>a.date.localeCompare(b.date)||String(a.log.createdAt||a.log.id).localeCompare(String(b.log.createdAt||b.log.id)));
-  const exercise=library.filter(e=>{const name=norm(e.name),profile=trackingProfile(e);const words=name.split(' ').filter(word=>word.length>2);return q.includes(name)||words.some(word=>q.split(' ').includes(word))||profile==='running'&&/\b(run|running|mile|5k|10k)\b/.test(q);}).sort((a,b)=>{const na=norm(a.name),nb=norm(b.name),aExact=q.includes(na)?1:0,bExact=q.includes(nb)?1:0;return bExact-aExact||nb.length-na.length;})[0];
+  const dateRange=dateWindow(question,zone,now),allDated=owned.map(l=>({log:l,date:dayKey(dateFor(l),zone)})).sort((a,b)=>a.date.localeCompare(b.date)||String(a.log.createdAt||a.log.id).localeCompare(String(b.log.createdAt||b.log.id)));
+  const dated=dateRange?allDated.filter(x=>x.date>=dateRange.start&&x.date<dateRange.end):allDated;
+  const exercise=findExercise(question,library),repCount=exactRepCount(question),distance=requestedDistance(question);
+  const noMatch=(details={})=>evidence.push({id:'no-match',kind:'insufficient_data',message:details.message||'I could not find a matching completed result in saved actual workout history, so I cannot give a reliable number yet.',...details});
   if(/focus|together|strength and endurance|what areas/.test(q)){
     const today=dayKey(now,zone),cutoffDate=new Date(`${today}T12:00:00Z`);cutoffDate.setUTCDate(cutoffDate.getUTCDate()-42);const cutoff=cutoffDate.toISOString().slice(0,10),recent=dated.filter(x=>x.date>=cutoff),strength=recent.flatMap(({log})=>(log.exercises||[]).filter(e=>e.status!=='skipped'&&trackingProfile(library.find(v=>v.id===e.exerciseId))==='strength').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false&&s.reps>0))),endurance=recent.flatMap(({log})=>(log.exercises||[]).filter(e=>e.status!=='skipped'&&trackingProfile(library.find(v=>v.id===e.exerciseId))!=='strength').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false&&(s.distance!=null||s.durationSeconds!=null))));
     evidence.push({id:'training-focus',kind:'training_summary',period:{start:cutoff,end:today},sessions:recent.length,strengthSets:strength.length,enduranceRecords:endurance.length,skippedSessions:dated.filter(({log,date})=>date>=cutoff&&log.status==='skipped').length,source:'saved actual workout records only'});
@@ -65,32 +119,35 @@ function evidenceFromQuestion(question,logs,library,timeZone,now,assignments=[])
     const today=dayKey(now,zone),dt=new Date(`${today}T12:00:00Z`),dow=(dt.getUTCDay()+6)%7;dt.setUTCDate(dt.getUTCDate()-dow-7);const start=dt.toISOString().slice(0,10);dt.setUTCDate(dt.getUTCDate()+7);const end=dt.toISOString().slice(0,10);
     const hits=dated.filter(x=>x.date>=start&&x.date<end);
     evidence.push({id:'last-week',kind:'sessions',period:{start,end},sessions:hits.map(({log,date})=>({date,name:log.sessionName,exercises:(log.exercises||[]).filter(x=>x.status!=='skipped').map(x=>({exercise:library.find(e=>e.id===x.exerciseId)?.name,sets:(x.sets||[]).filter(s=>s.completed!==false).map(s=>({reps:s.reps,load:s.load,loadUnit:s.loadUnit,rpe:s.rpe}))})),metcons:(log.blockResults||[]).filter(r=>r.status!=='skipped').map(r=>({name:r.metcon?.name,score:r.score}))}))});
-  } else if(exercise&&/heaviest|heavy|highest|best|fastest|last|latest|recent|volume|improv|progress|reps/.test(q)){
-    const p=trackingProfile(exercise),matches=dated.flatMap(({log,date})=>(log.exercises||[]).filter(e=>e.exerciseId===exercise.id&&e.status!=='skipped').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false).map((s,index)=>({id:`${log.id}:${exercise.id}:${index}`,date,workout:log.sessionName,exercise:exercise.name,reps:s.reps,loadLb:s.load==null?null:round(convertWeight(s.load,s.loadUnit||'lbs','lbs')),actualLoad:s.load,loadUnit:s.loadUnit||'lbs',rpe:s.rpe,distance:s.distance,distanceUnit:s.distanceUnit,durationSeconds:s.durationSeconds,paceSeconds:s.paceSeconds,volume:s.load!=null&&s.reps!=null?round(convertWeight(s.load,s.loadUnit||'lbs','lbs')*s.reps):null}))));
+  } else if(exercise&&/heaviest|heavy|highest|best|fastest|last|latest|recent|volume|improv|progress|chang|trend|reps/.test(q)){
+    const p=trackingProfile(exercise),matches=dated.flatMap(({log,date})=>(log.exercises||[]).filter(e=>e.exerciseId===exercise.id&&e.status!=='skipped').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false).map((s,index)=>({id:`${log.id}:${exercise.id}:${index}`,date,workout:log.sessionName,exercise:exercise.name,reps:s.reps,loadLb:s.load==null?null:round(convertWeight(s.load,s.loadUnit||'lbs','lbs')),actualLoad:s.load,loadUnit:s.loadUnit||'lbs',rpe:s.rpe,distance:s.distance,distanceUnit:s.distanceUnit,durationSeconds:s.durationSeconds,paceSeconds:s.paceSeconds,volume:s.load!=null&&s.reps!=null?round(convertWeight(s.load,s.loadUnit||'lbs','lbs')*s.reps):null,source:{type:'workout_log_set',workoutLogId:log.id,exerciseId:exercise.id,setIndex:index}}))));
     if(p==='strength'){
-      if(/heaviest|heavy|highest|best/.test(q)){const best=matches.filter(x=>x.actualLoad!=null).sort((a,b)=>b.loadLb-a.loadLb)[0];if(best)evidence.push({...best,id:'best-actual-load',kind:'actual_set',estimated1RM:false});}
+      if(/heaviest|heavy|highest|best/.test(q)){const candidates=matches.filter(x=>x.actualLoad!=null&&(repCount==null||x.reps===repCount)).sort((a,b)=>b.loadLb-a.loadLb||b.date.localeCompare(a.date));const best=candidates[0];if(best)evidence.push({...best,id:'best-actual-load',kind:'actual_set',estimated1RM:false,requestedRepCount:repCount,dateRange});else noMatch({exercise:exercise.name,requestedRepCount:repCount,dateRange,message:repCount?`I could not find a completed ${exercise.name} set with exactly ${repCount} reps${dateRange?` during ${dateRange.label}`:''} in saved workout history.`:`I could not find a matching completed result for ${exercise.name}${dateRange?` during ${dateRange.label}`:''} in saved workout history.`});}
       else if(/volume/.test(q)){const totals=dated.flatMap(({log,date})=>{const rows=(log.exercises||[]).filter(e=>e.exerciseId===exercise.id&&e.status!=='skipped').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false&&s.load!=null&&s.reps!=null).map(s=>convertWeight(s.load,s.loadUnit||'lbs','lbs')*s.reps));return rows.length?[{id:log.id,date,workout:log.sessionName,volumeLb:round(rows.reduce((a,b)=>a+b,0))}]:[];}).sort((a,b)=>b.volumeLb-a.volumeLb);if(totals[0])evidence.push({id:'highest-session-volume',kind:'actual_volume',exercise:exercise.name,...totals[0]});}
       else if(/last\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(q)){const dayName=q.match(/last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/)[1],today=dayKey(now,zone),dt=new Date(`${today}T12:00:00Z`),day=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'].indexOf(dayName),delta=(dt.getUTCDay()-day+7)%7||7;dt.setUTCDate(dt.getUTCDate()-delta);const date=dt.toISOString().slice(0,10),found=matches.filter(m=>m.date===date);evidence.push({id:'exercise-day',kind:found.length?'actual_sets':'insufficient_data',exercise:exercise.name,date,records:found});}
-      else if(/last week/.test(q)){const week=evidenceFromQuestion('logged workouts last week',logs,library,timeZone,now,assignments).evidence[0],records=matches.filter(m=>week.period&&m.date>=week.period.start&&m.date<week.period.end);evidence.push({id:'exercise-last-week',kind:records.length?'actual_sets':'insufficient_data',exercise:exercise.name,period:week.period,records});}
+      else if(/last week/.test(q)){const week=evidenceFromQuestion('logged workouts last week',logs,library,timeZone,now,assignments).evidence[0],records=matches.filter(m=>week.period&&m.date>=week.period.start&&m.date<week.period.end);if(records.length)evidence.push({id:'exercise-last-week',kind:'actual_sets',exercise:exercise.name,period:week.period,records,dateRange});else noMatch({exercise:exercise.name,dateRange,message:`I could not find a matching completed ${exercise.name} result during last week in saved workout history.`});}
       else if(/last|latest|recent/.test(q)&&/workout|session/.test(q)){const latestLog=dated.filter(({log})=>(log.exercises||[]).some(e=>e.exerciseId===exercise.id&&e.status!=='skipped'&&(e.sets||[]).some(s=>s.completed!==false))).at(-1);if(latestLog){const records=matches.filter(m=>m.id.startsWith(`${latestLog.log.id}:${exercise.id}:`));evidence.push({id:'latest-exercise-workout',kind:'actual_sets',exercise:exercise.name,date:latestLog.date,workout:latestLog.log.sessionName,records});}}
       else if(/last|latest|recent/.test(q)){const latest=matches.at(-1);if(latest)evidence.push({...latest,id:'latest-actual-set',kind:'actual_set',estimated1RM:false});}
       else if(matches.length){const first=matches[0],latest=matches.at(-1);evidence.push({id:'exercise-history',kind:'actual_sets',exercise:exercise.name,records:matches.slice(-30),...(first.loadLb!=null&&latest.loadLb!=null?{baselineLoadLb:first.loadLb,latestLoadLb:latest.loadLb,changeLb:round(latest.loadLb-first.loadLb)}:{}),trend:'Compare actual matching sets only; estimated one-rep max is not an actual lift.'});}
     } else if(p==='running'||p==='treadmill'){
-      const miles=Number((q.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi)/)||[])[1]),requestedMeters=miles?miles*1609.344:null;
-      const runs=dated.flatMap(({log,date})=>(log.exercises||[]).filter(e=>e.exerciseId===exercise.id&&e.status!=='skipped').flatMap(e=>{const sets=(e.sets||[]).filter(s=>s.completed!==false&&s.distance>0&&s.durationSeconds>0);const m=sets.reduce((n,s)=>n+s.distance*(s.distanceUnit==='km'?1000:s.distanceUnit==='mi'?1609.344:s.distanceUnit==='yd'?.9144:1),0),seconds=sets.reduce((n,s)=>n+s.durationSeconds,0);return m&&seconds?[{id:log.id,date,workout:log.sessionName,meters:round(m,1),seconds,paceSecondsPerMile:round(seconds/(m/1609.344),1)}]:[];}));
-      const comparable=requestedMeters?runs.filter(r=>Math.abs(r.meters-requestedMeters)/requestedMeters<=.01):runs;
-      const best=comparable.sort((a,b)=>a.seconds-b.seconds)[0];if(best)evidence.push({...best,id:'fastest-run',kind:'actual_run',requestedDistanceMeters:requestedMeters});
+      const runningLibrary=library.filter(item=>['running','treadmill'].includes(trackingProfile(item))),explicitRunning=runningLibrary.filter(item=>{const words=norm(item.name).split(' ').filter(word=>!['run','running','outdoor','exercise'].includes(word));return words.length&&words.every(word=>q.split(' ').includes(word));}),runIds=new Set((explicitRunning.length?explicitRunning:runningLibrary).map(item=>item.id));
+      const runs=dated.flatMap(({log,date})=>(log.exercises||[]).filter(e=>runIds.has(e.exerciseId)&&e.status!=='skipped').flatMap(e=>{const sets=(e.sets||[]).filter(s=>s.completed!==false&&s.distance>0&&s.durationSeconds>0);const meters=sets.reduce((n,s)=>n+s.distance*(s.distanceUnit==='km'?1000:s.distanceUnit==='mi'?1609.344:s.distanceUnit==='yd'?.9144:s.distanceUnit==='m'?1:1),0),seconds=sets.reduce((n,s)=>n+s.durationSeconds,0);return meters&&seconds?[{id:log.id,date,workout:log.sessionName,meters:round(meters,1),seconds,paceSecondsPerMile:round(seconds/(meters/1609.344),1),requestedDistance:distance?.label,source:{type:'workout_log',workoutLogId:log.id,exerciseId:e.exerciseId,setIndexes:sets.map((_,index)=>index)}}]:[];}));
+      const comparable=distance?runs.filter(r=>Math.round((r.meters/distance.unitMeters)*100)/100===Math.round(distance.value*100)/100):runs;
+      if(/improv|change|trend|progress/.test(q)&&comparable.length>1){const ordered=[...comparable].sort((a,b)=>a.date.localeCompare(b.date)),first=ordered[0],latest=ordered.at(-1);evidence.push({id:'running-trend',kind:'actual_run_trend',exercise:exercise.name,distance:distance?.label||`${round(first.meters/1609.344,2)} miles`,first,latest,changeSeconds:latest.seconds-first.seconds,dateRange,sourceRecords:ordered.map(x=>x.source)});}
+      else {const best=[...comparable].sort((a,b)=>a.seconds-b.seconds||a.date.localeCompare(b.date))[0];if(best)evidence.push({...best,exercise:explicitRunning.length?explicitRunning[0].name:'run',id:'fastest-run',kind:'actual_run',requestedDistanceMeters:distance?.meters||null,dateRange});else noMatch({exercise:explicitRunning[0]?.name||'run',requestedDistance:distance?.label||null,dateRange,message:`I could not find a completed ${explicitRunning[0]?.name||'run'}${distance?` recorded at exactly ${distance.label}`:''}${dateRange?`${dateRange.start===moveDate(dateRange.end,-1)?' on':' during'} ${dateRange.label}`:''} in saved workout history.`});}
     }
   }
-  if(!evidence.length)evidence.push({id:'no-match',kind:'insufficient_data',message:'No matching completed actual workout data was found for this request. Do not infer a result.'});
-  return {evidence,athleteTimezone:zone};
+  if(!evidence.length)noMatch();
+  const deterministic=!!(exercise&&(/\b(?:heaviest|heavy|highest|best|fastest|last|latest|recent|recorded|what weight|what load|what reps|how much|how many reps|time changed|performance changed|trend|progress)\b/.test(q)));
+  return {evidence,athleteTimezone:zone,deterministic};
 }
 
 export function answerFromEvidence(question,evidence){
   const row=evidence.find(x=>x.kind!=='insufficient_data');
-  if(!row)return 'I could not find a matching completed result in your saved training history, so I cannot give a reliable number yet.';
-  if(row.id==='best-actual-load')return `Your heaviest recorded ${row.exercise} set was ${row.actualLoad} ${row.loadUnit} for ${row.reps} reps on ${row.date} (${row.workout}). This is an actual lifted load, not an estimated 1RM.`;
-  if(row.id==='fastest-run')return `Your fastest matching recorded run was ${Math.floor(row.seconds/60)}:${String(row.seconds%60).padStart(2,'0')} over ${round(row.meters/1609.344,2)} miles on ${row.date} (${row.workout}).`;
+  if(!row)return evidence.find(x=>x.kind==='insufficient_data')?.message||'I could not find a matching completed result in your saved training history, so I cannot give a reliable number yet.';
+  if(row.id==='best-actual-load')return `${row.requestedRepCount?`Your heaviest recorded ${row.requestedRepCount}-rep ${row.exercise} set was`:`Your heaviest recorded ${row.exercise} set was`} ${row.actualLoad} ${row.loadUnit} for ${row.reps} reps on ${row.date} (${row.workout}). This is an actual lifted load, not an estimated 1RM.`;
+  if(row.id==='fastest-run')return `Your fastest matching recorded ${row.exercise||'run'} was ${Math.floor(row.seconds/60)}:${String(row.seconds%60).padStart(2,'0')} over ${row.requestedDistance||`${round(row.meters/1609.344,2)} miles`} on ${row.date} (${row.workout}).`;
+  if(row.id==='running-trend'){const time=x=>`${Math.floor(x.seconds/60)}:${String(x.seconds%60).padStart(2,'0')}`,faster=row.changeSeconds<0;return `Your recorded ${row.distance} time changed from ${time(row.first)} on ${row.first.date} to ${time(row.latest)} on ${row.latest.date}${row.changeSeconds===0?'; it was unchanged':`; ${Math.abs(row.changeSeconds)} seconds ${faster?'faster':'slower'}`}.`;}
   if(row.id==='leg-frequency')return `You logged ${row.value} lower-body training session${row.value===1?'':'s'} in ${row.period}.`;
   if(row.id==='last-week')return row.sessions.length?`From ${row.period.start} through ${row.period.end} (your local calendar week), you logged ${row.sessions.length} workout${row.sessions.length===1?'':'s'}: ${row.sessions.map(s=>`${s.name} on ${s.date}`).join('; ')}.`:'I found no saved workouts for your local calendar week last week.';
   if(row.id==='latest-actual-set')return `Your latest recorded ${row.exercise} set was ${row.actualLoad} ${row.loadUnit} × ${row.reps} reps on ${row.date} (${row.workout}).`;
@@ -107,6 +164,6 @@ export function answerFromEvidence(question,evidence){
 
 export function analyzeTrainingQuestion({question,logs,library,assignments=[],timeZone='UTC',now=new Date()}){
   if(typeof question!=='string'||question.trim().length<3||question.length>500)throw Error('Ask a question between 3 and 500 characters.');
-  const {evidence,athleteTimezone}=evidenceFromQuestion(question,logs,library,timeZone,now,assignments);
-  return {answer:answerFromEvidence(question,evidence),evidence,athleteTimezone};
+  const {evidence,athleteTimezone,deterministic}=evidenceFromQuestion(question,logs,library,timeZone,now,assignments);
+  return {answer:answerFromEvidence(question,evidence),evidence,athleteTimezone,deterministic};
 }

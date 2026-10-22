@@ -99,8 +99,8 @@ const server=http.createServer(async(req,res)=>{
         if(u.role==='coach'&&!db.prepare("SELECT id FROM records WHERE kind='assignment' AND owner=? LIMIT 1").get(athleteId))fail(403,'Choose an athlete you coach.');
         const ownLogs=all('log').filter(l=>l.athleteId===athleteId);
         const analysis=checked(()=>analyzeTrainingQuestion({question:b.question,logs:ownLogs,library:all('exercise'),assignments:all('assignment').filter(a=>a.athleteId===athleteId),timeZone:b.timeZone||'UTC'}));
-        if(!trainingAnswers.available)fail(503,'Ask AI is unavailable. Configure the existing OpenAI provider on the server.');
-        result=await trainingAnswers.answer({userId:u.id,question:b.question,analysis});
+        if(!trainingAnswers.available&&!analysis.deterministic)fail(503,'Ask AI is unavailable. Configure the existing OpenAI provider on the server.');
+        result=analysis.deterministic?{...analysis,provider:'verified-workout-history'}:await trainingAnswers.answer({userId:u.id,question:b.question,analysis});
       }
       else if(route==='/api/strength-goal'&&req.method==='POST'){const athleteId=b.athleteId||u.id;if(u.role!=='coach'&&athleteId!==u.id)fail(403,'Access denied.');if(!db.prepare("SELECT id FROM users WHERE id=? AND role='athlete'").get(athleteId))fail(404,'Athlete not found.');result=put('strengthGoal',checked(()=>prepareStrengthGoal(b,all('exercise'),athleteId)),athleteId);}
       else if(route==='/api/strength-pr'&&req.method==='POST'){if(u.role!=='athlete')fail(403,'Athlete access required.');if(b.athleteId&&b.athleteId!==u.id)fail(403,'Access denied.');if(b.id){const previous=get('strengthPR',b.id);if(!previous||previous.athleteId!==u.id)fail(404,'Manual PR not found.');}result=put('strengthPR',checked(()=>prepareStrengthPR(b,all('exercise'),u.id)),u.id);}

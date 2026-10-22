@@ -6,6 +6,7 @@ const numbers=value=>(String(value).match(/\d+(?:\.\d+)?/g)||[]).map(Number);
 export function createTrainingAnswerService({apiKey,model='gpt-4.1-mini',fetchImpl=fetch,timeoutMs=30000,now=()=>Date.now(),requestsPerHour=6}={}){
   const attempts=new Map(),active=new Set();
   return {available:!!apiKey,async answer({userId,question,analysis}){
+    if(analysis?.deterministic)return {...analysis,provider:'verified-workout-history'};
     if(!apiKey)throw new GenerationError('NOT_CONFIGURED','Ask AI needs the existing server-side OpenAI configuration.',503);
     const at=now(),recent=(attempts.get(userId)||[]).filter(t=>t>at-3600000);if(recent.length>=requestsPerHour)throw new GenerationError('ASK_RATE_LIMIT','Ask AI hourly limit reached. Try again later.',429);
     if(active.has(userId))throw new GenerationError('ASK_BUSY','Your previous question is still being answered.',429);
