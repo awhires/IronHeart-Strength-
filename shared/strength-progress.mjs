@@ -18,10 +18,10 @@ export function estimateMax(load,reps,repMax=1,method=DEFAULT_METHOD){
 export function strengthProgress(logs,exerciseId,athleteId,library=[],manualPRs=[]){
   const performances=[],monthly=new Map(),actualBests={},evidence=[];
   for(const log of logs||[]){
-    if(log.athleteId!==athleteId)continue;
+    if(log.athleteId!==athleteId||log.status==='skipped')continue;
     const date=workoutDate(log);if(!date)continue;
     for(const [exerciseIndex,entry] of (log.exercises||[]).entries()){
-      if(entry.exerciseId!==exerciseId||entry.complex?.length||entry.volumeEligible===false||trackingProfile({...library.find(e=>e.id===exerciseId),...entry})!=='strength')continue;
+      if(entry.exerciseId!==exerciseId||entry.status==='skipped'||entry.complex?.length||entry.volumeEligible===false||trackingProfile({...library.find(e=>e.id===exerciseId),...entry})!=='strength')continue;
       for(const [setIndex,set] of (Array.isArray(entry.sets)?entry.sets:[]).entries()){
         const unit=set.loadUnit??entry.target?.loadUnit??'lbs';
         if(set.completed===false||set.warmup===true||set.isWarmup===true||set.type==='warmup'||!Number.isFinite(set.load)||set.load<=0||!Number.isInteger(set.reps)||set.reps<1||!['lbs','kg'].includes(unit))continue;

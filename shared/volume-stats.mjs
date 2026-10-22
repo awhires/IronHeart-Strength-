@@ -9,9 +9,10 @@ export function workoutDate(log){
 export function exerciseVolume(log,exerciseId,unit='lbs'){
   if(!['lbs','kg'].includes(unit))throw Error('Choose lbs or kg.');
   let volume=0,validSets=0,excludedSets=0;
-  for(const exercise of log.exercises||[])if(exercise.exerciseId===exerciseId){
+  for(const exercise of log.exercises||[])if(exercise.exerciseId===exerciseId&&exercise.status!=='skipped'&&log.status!=='skipped'){
     if((exercise.trackingType&&exercise.trackingType!=='strength')||exercise.volumeEligible===false){excludedSets+=(exercise.sets||[]).length;continue;}
     for(const set of exercise.sets||[]){
+      if(set.completed===false){excludedSets++;continue;}
       const from=set.loadUnit??exercise.target?.loadUnit??'lbs'; // Legacy logs are pounds.
       if(!number(set.load)||set.load<0||!Number.isInteger(set.reps)||set.reps<0||!['lbs','kg'].includes(from)){excludedSets++;continue;}
       volume+=convertWeight(set.load,from,unit)*set.reps;validSets++;

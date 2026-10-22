@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Activity, Check, Plus, Trash2, UserPlus } from 'lucide-react';
 import { MetconEditor, MetconSummary } from './WorkoutBlocks.jsx';
+import PrescriptionEditor from './PrescriptionEditor.jsx';
 import ScanPhoto from './ScanPhoto.jsx';
 import { modalityOf } from '../shared/program-schedule.mjs';
 import { newMetcon, SCORE_TYPES } from '../shared/workout-blocks.mjs';
@@ -10,7 +11,7 @@ import './metcon-studio.css';
 const copy = value => structuredClone(value);
 const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const fresh = () => ({ draftId: crypto.randomUUID(), ...newMetcon(), benchmark: false });
-const freshDay = (day, index) => ({ name: `Workout day ${index + 1}`, day, metcons: [fresh()] });
+const freshDay = (day, index) => ({ name: `Workout day ${index + 1}`, day, metcons: [fresh()], strengthEnabled: false, strengthExercises: [] });
 
 export default function MetconStudio({ data, busy, request, onSave, onOpen, onAssign, onProgress }) {
   const [programName,setProgramName]=useState(''),[description,setDescription]=useState(''),[weeks,setWeeks]=useState(1);
@@ -29,8 +30,11 @@ export default function MetconStudio({ data, busy, request, onSave, onOpen, onAs
   function removeDay(){if(sessions.length<=1)return;const next=sessions.filter((_,i)=>i!==activeSession);setSessions(next);setActiveSession(Math.max(0,activeSession-1));setActiveMetcon(0);}
   function addMetcon(){const next={...session,metcons:[...session.metcons,fresh()]};setSessions(rows=>rows.map((s,i)=>i===activeSession?next:s));setActiveMetcon(next.metcons.length-1);}
   function removeMetcon(){if(session.metcons.length<=1)return;const next={...session,metcons:session.metcons.filter((_,i)=>i!==activeMetcon)};setSessions(rows=>rows.map((s,i)=>i===activeSession?next:s));setActiveMetcon(Math.max(0,activeMetcon-1));}
-  async function save(e){e.preventDefault();setError('');if(!programName.trim()){setError('Enter a program name.');return;}for(const s of sessions){if(!s.metcons.length||s.metcons.some(m=>!m.movements.length)){setError(`Add at least one movement to every MetCon on ${days[s.day]}.`);return;}if(s.metcons.some(m=>(unmatchedByDraft[m.draftId]||[]).length)){setError('Choose a library exercise for every unmatched whiteboard line before saving.');return;}}
-    const preparedSessions=sessions.map(s=>({name:s.metcons.length===1?(s.metcons[0].name||programName.trim()):`${days[s.day]} · MetCons`,day:s.day,exercises:[],blocks:s.metcons.map(m=>{const {draftId,...prescription}=copy(m);return {id:crypto.randomUUID(),type:'Metcon',metcon:{...prescription,benchmark:saveAsBenchmark}};})}));
+  function addStrength(){setSessions(rows=>rows.map((s,i)=>i===activeSession?{...s,strengthEnabled:true}:s));}
+  function removeStrength(){setSessions(rows=>rows.map((s,i)=>i===activeSession?{...s,strengthEnabled:false,strengthExercises:[]}:s));}
+  function updateStrength(items){setSessions(rows=>rows.map((s,i)=>i===activeSession?{...s,strengthExercises:items}:s));}
+  async function save(e){e.preventDefault();setError('');if(!programName.trim()){setError('Enter a program name.');return;}for(const s of sessions){if(s.strengthEnabled&&!s.strengthExercises?.length){setError(`Add at least one strength exercise on ${days[s.day]}, or remove the empty strength block.`);return;}if(!s.metcons.length||s.metcons.some(m=>!m.movements.length)){setError(`Add at least one movement to every MetCon on ${days[s.day]}.`);return;}if(s.metcons.some(m=>(unmatchedByDraft[m.draftId]||[]).length)){setError('Choose a library exercise for every unmatched whiteboard line before saving.');return;}}
+    const preparedSessions=sessions.map(s=>{const strengthExercises=copy(s.strengthExercises||[]);return {name:s.metcons.length===1?(s.metcons[0].name||programName.trim()):`${days[s.day]} · MetCons`,day:s.day,exercises:strengthExercises,blocks:[...(s.strengthEnabled?[{id:crypto.randomUUID(),type:'Strength',name:'Part A · Strength',exerciseIndexes:strengthExercises.map((_,i)=>i)}]:[]),...s.metcons.map((m,i)=>{const {draftId,...prescription}=copy(m);return {id:crypto.randomUUID(),type:'Metcon',name:`Part ${String.fromCharCode(66+i)} · MetCon`,metcon:{...prescription,benchmark:saveAsBenchmark}};})]};});
     const program={name:programName.trim(),goal:saveAsBenchmark?'Metcon benchmark':'Conditioning',modality:'metcon',weeks,description:description.trim(),sessions:preparedSessions,plan:Array.from({length:weeks},(_,i)=>({week:i+1,sessions:copy(preparedSessions)}))};
     const result=await onSave(program);if(!result)setError('The program was not saved. Check the message above and try again.');
   }
@@ -55,6 +59,7 @@ export default function MetconStudio({ data, busy, request, onSave, onOpen, onAs
         <section className="panel metcon-studio-panel">
           <div className="section-heading"><div><h2>{days[session.day]} · MetCons</h2><p>Each block has its own score type, prescription, and athlete result.</p></div><button type="button" className="btn secondary" disabled={session.metcons.length>=3} onClick={addMetcon}><Plus size={15}/>Add another MetCon</button></div>
           {session.metcons.length>1&&<div className="metcon-block-tabs" role="tablist" aria-label={`${days[session.day]} MetCons`}>{session.metcons.map((m,i)=><button type="button" role="tab" aria-selected={i===activeMetcon} className={i===activeMetcon?'active':''} key={m.draftId} onClick={()=>setActiveMetcon(i)}>{m.name||`MetCon ${i+1}`}</button>)}{session.metcons.length>1&&<button type="button" className="text-button" onClick={removeMetcon}>Remove selected</button>}</div>}
+          <section className="panel metcon-strength-part" aria-label="Optional strength block"><div className="section-heading"><div><h2>Part A · Strength (optional)</h2><p>Add strength exercises before this day’s MetCon blocks.</p></div>{session.strengthEnabled&&<button type="button" className="btn danger-outline" onClick={removeStrength}><Trash2 size={15}/>Remove strength block</button>}</div>{session.strengthEnabled?<PrescriptionEditor items={session.strengthExercises||[]} exercises={data.exercises} onChange={updateStrength}/>:<button type="button" className="btn secondary" onClick={addStrength}><Plus size={15}/>Add strength work</button>}</section>
           <MetconEditor key={`${session.day}-${activeSession}-${metcon.draftId}`} value={metcon} exercises={data.exercises} onChange={updateMetcon}/>
           <button type="button" className="btn secondary metcon-add-another" disabled={session.metcons.length>=3} onClick={addMetcon}><Plus size={15}/>Add another MetCon to {days[session.day]}</button>
           <div className="metcon-studio-divider"/><div className="section-heading"><div><h2>Athlete preview</h2><p>This is the workout and score card athletes receive.</p></div></div>

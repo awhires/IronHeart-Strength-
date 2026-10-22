@@ -78,7 +78,7 @@ export function recordBlockScores(scores,blocks=[]){
  const targets=blocks.filter(b=>b.type==='Metcon');
  if(!targets.length){if(scores?.length)throw Error('Unexpected Metcon results.');return [];}
  if(!Array.isArray(scores)||scores.length!==targets.length)throw Error('Log every Metcon block.');
- return targets.map((b,i)=>{if(scores[i].blockId!==b.id)throw Error('Metcon block mismatch.');return {blockId:b.id,metcon:structuredClone(b.metcon),score:prepareMetconScore(scores[i].score,b.metcon)};});
+ return targets.map((b,i)=>{if(scores[i].blockId!==b.id)throw Error('Metcon block mismatch.');if(scores[i].skipped===true){if(typeof(scores[i].skipReason??'')!=='string'||(scores[i].skipReason||'').length>500)throw Error('Skip reason must be 500 characters or fewer.');return {blockId:b.id,metcon:structuredClone(b.metcon),status:'skipped',...(scores[i].skipReason?{skipReason:scores[i].skipReason}:{})};}return {blockId:b.id,metcon:structuredClone(b.metcon),score:prepareMetconScore(scores[i].score,b.metcon)};});
 }
 export function metconKey(m){
  // Names are labels; ordered structure, targets, units and instructions define the test.

@@ -128,7 +128,9 @@ export function recordPerformance(entries,targets,library=[]){
   if(!Array.isArray(entries)||entries.length!==targets.length)throw Error('Log every exercise.');
   return entries.map((entry,i)=>{
     const target=((MOVEMENT_TYPES.includes(targets[i].trackingType)||entry.sets?.some(s=>s.durationSeconds!=null||s.distance!=null))?movementPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId)):null)||cardioPrescription(targets[i],library.find(e=>e.id===targets[i].exerciseId))||normalizePrescription(targets[i]);
-    if(target.trackingType&&target.trackingType!=='strength'){if(entry.sets?.length!==(MOVEMENT_TYPES.includes(target.trackingType)?target.sets:prescribedCardioIntervals(target).length))throw Error('Complete every prescribed interval.');if(entry.exerciseId!==target.exerciseId)throw Error('Exercise mismatch.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
+    if(entry.exerciseId!==targets[i].exerciseId)throw Error('Exercise mismatch.');
+    if(entry.skipped===true){if(typeof(entry.skipReason??'')!=='string'||(entry.skipReason||'').length>500)throw Error('Skip reason must be 500 characters or fewer.');return {exerciseId:entry.exerciseId,status:'skipped',...(entry.skipReason?{skipReason:entry.skipReason}:{}),target};}
+    if(target.trackingType&&target.trackingType!=='strength'){if(entry.sets?.length!==(MOVEMENT_TYPES.includes(target.trackingType)?target.sets:prescribedCardioIntervals(target).length))throw Error('Complete every prescribed interval.');return {...prepareJournalEntry(entry,library.find(e=>e.id===entry.exerciseId)||{id:entry.exerciseId,trackingType:target.trackingType},library),target};}
     if(entry.exerciseId!==target.exerciseId||!Array.isArray(entry.sets)||(entry.actualSetGroups===true?(entry.sets.length<1||entry.sets.length>30):target.sets==null?(entry.sets.length<1||entry.sets.length>30):entry.sets.length!==target.sets))throw Error('Complete every prescribed set.');
     const perSet=prescribedSets(target);
     const sets=entry.sets.map((s,j)=>{

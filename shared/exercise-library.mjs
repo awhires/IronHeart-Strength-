@@ -1,5 +1,5 @@
 // Additive catalog update; existing coach records take precedence.
-export const LIBRARY_UPDATE='chest-back-legs-speed-bench-2026-10';
+export const LIBRARY_UPDATE='mixed-metcon-strength-walking-lunge-2026-10';
 const groups=[
  ['Upper body','Push',[
   ['db-bench','Dumbbell Bench Press','Dumbbell'],['incline-barbell','Incline Barbell Bench Press','Barbell'],
@@ -26,7 +26,7 @@ const groups=[
   ['front-squat','Front Squat','Barbell'],['box-squat','Box Squat','Barbell'],['hack-squat','Hack Squat','Machine'],['leg-press','Leg Press','Machine']
  ]],
  ['Lower body','Lunge',[
-  ['bulgarian-split-squat','Bulgarian Split Squat','Dumbbell'],['reverse-lunge','Reverse Lunge','Dumbbell'],['step-up','Step-up','Dumbbell']
+  ['walking-lunge','Walking Lunges','Bodyweight'],['bulgarian-split-squat','Bulgarian Split Squat','Dumbbell'],['reverse-lunge','Reverse Lunge','Dumbbell'],['step-up','Step-up','Dumbbell']
  ]],
  ['Lower body','Hinge',[
   ['sumo-deadlift','Sumo Deadlift','Barbell'],['trap-bar-deadlift','Trap Bar Deadlift','Barbell'],['hip-thrust','Hip Thrust','Barbell']

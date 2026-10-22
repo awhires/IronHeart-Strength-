@@ -7,7 +7,7 @@ import {openStore} from '../server/store.mjs';
 import {exercises} from '../server/seed.mjs';
 import {additionalExercises,LIBRARY_UPDATE,missingLibraryExercises} from '../shared/exercise-library.mjs';
 import {createLocalDemo} from '../src/local-demo.mjs';
-test('expanded catalog includes requested variants and skips duplicate names and aliases',()=>{  assert.equal(additionalExercises.length,50);assert.equal(exercises.length,62);
+test('expanded catalog includes requested variants and skips duplicate names and aliases',()=>{  assert.equal(additionalExercises.length,51);assert.equal(exercises.length,63);assert.ok(additionalExercises.some(e=>e.id==='walking-lunge'));
   assert.equal(new Set(exercises.map(e=>e.id)).size,exercises.length);
   assert.equal(missingLibraryExercises(exercises).length,0);
   const existing=[{id:'custom',name:'Incline Barbell Press',video:'custom-video'},{id:'other',name:'Face Pulls'}];
