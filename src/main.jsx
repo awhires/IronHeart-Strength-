@@ -18,6 +18,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Activity, ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, ClipboardList, Dumbbell, Flame, LayoutDashboard, LogOut, Menu, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sparkles, Target, Trash2, TrendingUp, Users, X, RotateCcw, Copy, Pencil, HeartPulse, ExternalLink } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+import { attachRefreshTriggers } from '../shared/refresh-triggers.mjs';
 import './styles.css';
 import ProgressionGenerator from './ProgressionGenerator.jsx';
 import AIDraftReview from './AIDraftReview.jsx';
@@ -67,12 +69,13 @@ function App(){
   const [generations,setGenerations]=useState([]),[activeGeneration,setActiveGeneration]=useState('sample'),[builderSeed,setBuilderSeed]=useState(null);
   const [data,setData]=useState(null),[config,setConfig]=useState(null),[page,setPage]=useState('overview'),[modal,setModal]=useState(null),[toast,setToast]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[mobile,setMobile]=useState(false),[selectedAthlete,setSelectedAthlete]=useState('all'),[weekOffset,setWeekOffset]=useState(0),[search,setSearch]=useState(''),[filter,setFilter]=useState('All'),[planWeek,setPlanWeek]=useState(1),[selectedAssignment,setSelectedAssignment]=useState(''),[recommendations,setRecommendations]=useState(null);
   const dataRef=useRef(data);dataRef.current=data;
-  const refresh=async()=>setData(await api('data'));
-  useEffect(()=>{api('config').then(setConfig).catch(e=>setError(e.message));api('data').then(setData).catch(()=>{});},[]);
-  useEffect(()=>{const refreshWhenVisible=()=>{if(dataRef.current&&document.visibilityState==='visible')api('data').then(setData).catch(()=>{});};document.addEventListener('visibilitychange',refreshWhenVisible);window.addEventListener('focus',refreshWhenVisible);window.addEventListener('pageshow',refreshWhenVisible);return()=>{document.removeEventListener('visibilitychange',refreshWhenVisible);window.removeEventListener('focus',refreshWhenVisible);window.removeEventListener('pageshow',refreshWhenVisible);};},[]);
+  const refreshSequence=useRef(0);
+  const refresh=async()=>{const sequence=++refreshSequence.current;const next=await api('data');if(sequence===refreshSequence.current){dataRef.current=next;setData(next);}return dataRef.current||next;};
+  useEffect(()=>{api('config').then(setConfig).catch(e=>setError(e.message));refresh().catch(()=>{});},[]);
+  useEffect(()=>attachRefreshTriggers({isNative:Capacitor.isNativePlatform(),app:CapacitorApp,document,window,refresh,shouldRefresh:()=>!!dataRef.current}),[]);
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),4500);return()=>clearTimeout(t);}},[toast]);
   const perform=async(fn,success,close=true)=>{setBusy(true);setError('');try{const value=await fn();try{await refresh();}catch{setError('Your change was saved, but history could not refresh. Reconnect and reload; do not submit it again.');}if(close)setModal(null);if(success)setToast(typeof success==='function'?success(value):success);return value;}catch(e){setError(e.message);return null;}finally{setBusy(false);}};
-  const go=p=>{setPage(p);setSearch('');setFilter('All');setError('');setMobile(false);};
+  const go=p=>{setPage(p);setSearch('');setFilter('All');setError('');setMobile(false);if(!isCoach&&['training','athlete-programs','calendar','plan'].includes(p))refresh().catch(()=>{});};
   const show=(type,value={})=>{setError('');setModal({type,...value});};
   const remove=(kind,item,after)=>show('confirm',{title:kind==='log'?'Delete workout log?':`Delete ${kind==='assignment'?'assigned program':kind}?`,text:kind==='athlete'?'This permanently removes the athlete account, assigned programs, and workout history.':kind==='log'?'The completed sets and feedback will be removed. You can then log this session again.':kind==='assignment'?'This removes the scheduled program. Completed workout history is kept.':kind==='program'?'This removes the template. Programs already assigned to athletes are kept.':'This action cannot be undone.',action:()=>perform(async()=>{await api('delete','POST',{kind,id:item.id});after?.();},'Deleted successfully')});
   const exercise=id=>data?.exercises.find(e=>e.id===id)||{name:'Removed exercise',region:'',equipment:''};
@@ -80,6 +83,9 @@ function App(){
   const isCoach=data?.user.role==='coach';
   const assignments=data?.assignments.filter(a=>selectedAthlete==='all'||a.athleteId===selectedAthlete)||[];
   const chosen=data?.assignments.find(a=>a.id===selectedAssignment)||assignments[0];
+  const openedSession=modal?.type==='workout'?modal.assignment.plan[modal.week-1]?.sessions[modal.session]:null;
+  const latestOpenedSession=modal?.type==='workout'?data?.assignments.find(a=>a.id===modal.assignment.id)?.plan[modal.week-1]?.sessions[modal.session]:null;
+  const openedWorkoutIsStale=!!openedSession&&!!latestOpenedSession&&(openedSession.prescriptionRevision||0)!==(latestOpenedSession.prescriptionRevision||0);
   useEffect(()=>{
     let active=true;
     if(page==='progression'&&chosen){
@@ -90,9 +96,9 @@ function App(){
   },[page,chosen,planWeek]);
   const recs=recommendations&&recommendations.assignment===chosen&&recommendations.week===planWeek?recommendations.rows.filter(r=>recommendationTarget(chosen,planWeek,r)):[];
   const progressionPlan=planWeeks(chosen);
-  const openAssignment=a=>{setSelectedAssignment(a.id);setPlanWeek(1);go('plan');};
+  const openAssignment=async a=>{if(!isCoach){try{const latest=await refresh();a=latest.assignments.find(v=>v.id===a.id)||a;}catch(e){setError(`Could not refresh this program: ${e.message}`);return;}}setSelectedAssignment(a.id);setPlanWeek(1);go('plan');};
   const logFor=(a,w,si)=>data.logs.find(l=>l.assignmentId===a.id&&l.week===w&&l.session===si);
-  const openSession=(a,w,si)=>{if(a.plan[w-1].sessions[si].cancelled&&!isCoach)return;const logged=logFor(a,w,si);if(logged)show('history',{log:logged});else if(isCoach)show('session',{assignment:clone(a),week:w,session:si});else show('workout',{assignment:a,week:w,session:si});};
+  const openSession=async(a,w,si)=>{if(!isCoach){try{const latest=await refresh();a=latest.assignments.find(v=>v.id===a.id)||a;}catch(e){setError(`Could not refresh this workout: ${e.message}`);return;}}if(a.plan[w-1]?.sessions[si]?.cancelled&&!isCoach)return;const logged=dataRef.current?.logs.find(l=>l.assignmentId===a.id&&l.week===w&&l.session===si);if(logged)show('history',{log:logged});else if(isCoach)show('session',{assignment:clone(a),week:w,session:si});else show('workout',{assignment:a,week:w,session:si});};
   const events=[];assignments.filter(a=>a.enrollment?.status!=='pending').forEach(a=>planWeeks(a).forEach(w=>(Array.isArray(w.sessions)?w.sessions:[]).forEach((s,si)=>{if(!s)return;const date=sessionDate(a,w.week,s);if(!s.cancelled&&date>=localDate(a.startDate))events.push({a,w:w.week,si,s,date,key:dateString(date),log:data.logs.find(l=>l.assignmentId===a.id&&l.week===w.week&&l.session===si)});} )));
   const weekStart=monday(new Date());weekStart.setDate(weekStart.getDate()+weekOffset*7);
   const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d;});
@@ -114,7 +120,7 @@ function App(){
       {error&&!modal&&<div className="error" role="alert">{error}<button onClick={()=>setError('')} aria-label="Dismiss error"><X size={16}/></button></div>}
       {page==='overview'&&!isCoach&&<AthleteHome data={data} events={events} todayEvents={todayEvents} weekDays={weekDays} onSession={openSession} onMove={event=>show('move',{event})} onPrograms={()=>go('athlete-programs')} onTraining={()=>go('training')} onStats={()=>go('stats')}/>}
       {page==='training'&&!isCoach&&<AthleteTraining data={data} onSession={openSession} onMove={event=>show('move',{event})} onPrograms={()=>go('athlete-programs')} onCalendar={()=>go('calendar')}/>}
-      {page==='athlete-programs'&&!isCoach&&<AthletePrograms data={data} onDetails={v=>show('details',v)} onOpen={openAssignment}/>}
+      {page==='athlete-programs'&&!isCoach&&<AthletePrograms data={data} onDetails={async v=>{try{const latest=await refresh();const current=v.assignment?latest?.assignments.find(a=>a.id===v.assignment.id):latest?.discover.find(p=>p.id===v.program.id);show('details',v.assignment?{assignment:current||v.assignment}:{program:current||v.program});}catch(e){setError(`Could not refresh this program: ${e.message}`);}}} onOpen={openAssignment}/>}
       {page==='stats'&&<StrengthProgress data={data} onSaveGoal={async b=>{await api('strength-goal','POST',b);await refresh();}} onSavePR={async b=>{await api('strength-pr','POST',b);await refresh();}} onDeletePR={async id=>{await api('delete','POST',{kind:'strengthPR',id});await refresh();}} onSession={log=>show('history',{log})} onAnalytics={()=>go('volume')}/>}
       {page==='more'&&!isCoach&&<><PageHeading eyebrow="YOUR IRON HEART" title="More" subtitle="Programs, progress and your account."/><div className="more-grid">{[['exercises','Exercise Library'],['athlete-programs','Programs'],['stats','Goals & Progress'],['settings','Account & Settings']].map(([id,label])=><button className="btn secondary" key={id} onClick={()=>go(id)}>{label}</button>)}<details className="panel"><summary>Help / Feedback</summary><p>For programming or account help, contact your coach. To report an app issue, include the app version, screen name and steps that caused it.</p></details><button className="btn secondary" onClick={async()=>{await api('logout','POST',{});token='';setData(null);setPage('overview');setModal(null);setGenerations([]);setBuilderSeed(null);}}>Sign Out</button></div></>}
       {page==='overview'&&isCoach&&<>
@@ -142,6 +148,7 @@ function App(){
     {toast&&<div className="toast" role="status"><CheckCircle2 size={18}/>{toast}</div>}
     {modal&&<Modal title={({program:modal.program?.id?'Edit program':'Create program',assign:'Assign a program',athlete:'Add an athlete',invite:'Athlete invitation',exercise:modal.exercise?.id?'Edit exercise':'Add exercise',video:modal.exercise?.name,session:'Personalize session',workout:'Log your workout',history:'Completed workout',details:'Program details',enrollment:'Set up your program',move:'Move workout',confirm:modal.title})[modal.type]} wide={['program','session','workout','history','details','enrollment'].includes(modal.type)} onClose={()=>{setModal(null);setError('');}}>
       {error&&<div className="error" role="alert">{error}</div>}
+      {openedWorkoutIsStale&&<div className="info-banner" role="status"><ShieldCheck size={20}/><p>Your coach updated this workout while it was open. Your entered results are still here. Saving against the old prescription will be rejected; copy any entries you need, then close and reopen the workout to load the update.</p></div>}
       {modal.type==='details'&&<ProgramDetails {...modal} logs={data.logs} exercises={data.exercises} onStart={()=>show('enrollment',{program:modal.program,assignment:modal.assignment})} onOpen={()=>{setModal(null);openAssignment(modal.assignment);}}/>}
       {modal.type==='enrollment'&&<EnrollmentSetup {...modal} request={api} onConfirmed={async a=>{await refresh();setModal(null);openAssignment(a);setToast('Program started — schedule confirmed');}}/>}
       {modal.type==='move'&&<MoveWorkout event={modal.event} otherEvents={events} request={api} onSaved={async()=>{await refresh();setModal(null);setToast('Workout moved — progress preserved');}}/>}

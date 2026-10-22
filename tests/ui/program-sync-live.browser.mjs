@@ -24,7 +24,7 @@ test('coach program editor Save reaches both existing athletes on reopened mobil
  // change must preserve that field while applying unrelated edits around it.
  const personal=structuredClone(assignments[0].plan[2].sessions[0].exercises);personal[0].reps=6;assert.equal((await req('assignment','PUT',{id:assignments[0].id,week:3,session:0,exercises:personal})).status(),200);
  const newExercise=coachData.exercises.find(e=>!['bench','lat-pulldown'].includes(e.id)&&(!e.trackingType||e.trackingType==='strength'));assert.ok(newExercise,'seed library has an additional strength exercise');
- const athleteScreens=[];for(let i=0;i<athletes.length;i++){const athlete=athletes[i],context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await page.goto(base);await page.getByLabel('Email address',{exact:true}).fill(athlete.email);await page.getByLabel('Password',{exact:true}).fill(athlete.password);await page.getByRole('button',{name:/^Sign in/}).click();await page.getByRole('navigation',{name:'Athlete navigation'}).waitFor();await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(assignments[i].id);await page.getByRole('button',{name:'W3',exact:true}).waitFor();athleteScreens.push({context,page,errors});}
+ const athleteScreens=[];for(let i=0;i<athletes.length;i++){const athlete=athletes[i],context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[],network=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.url().includes('/api/'))network.push(`${r.status()} ${new URL(r.url()).pathname}`);});page.on('requestfailed',r=>network.push(`FAILED ${r.url()} ${r.failure()?.errorText}`));await page.goto(base);await page.getByLabel('Email address',{exact:true}).fill(athlete.email);await page.getByLabel('Password',{exact:true}).fill(athlete.password);await page.getByRole('button',{name:/^Sign in/}).click();try{await page.getByRole('navigation',{name:'Athlete navigation'}).waitFor();}catch(e){throw new Error(`Athlete ${i+1} login did not reach the athlete view: ${(await page.locator('body').innerText()).slice(0,1200)}; page errors: ${errors.join('; ')}; API: ${network.join(', ')}; ${e.message}`);}await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(assignments[i].id);await page.getByRole('button',{name:'W3',exact:true}).waitFor();await page.getByRole('button',{name:'W3',exact:true}).click();const session=page.locator('.training-session').filter({hasText:'Upper 3'});await session.locator('.calendar-event').click();const dialog=page.getByRole('dialog');const load=dialog.getByLabel('Bench Press row 1 Load',{exact:true});await load.fill(i===0?'177':'179');athleteScreens.push({context,page,errors,load});}
  const coachContext=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
  const coachPage=await coachContext.newPage();coachPage.setDefaultTimeout(12000);
  await coachPage.request.post(base+'/api/demo',{data:{role:'coach'}});
@@ -34,7 +34,7 @@ test('coach program editor Save reaches both existing athletes on reopened mobil
  const card=coachPage.locator('.program-card').filter({hasText:program.name});
  await card.getByRole('button',{name:'Edit program',exact:true}).click();
  const dialog=coachPage.getByRole('dialog');
- await dialog.getByLabel('Block length').selectOption('6');
+ await dialog.getByLabel('Program length',{exact:true}).selectOption('6');
  await dialog.getByRole('button',{name:'Week 3',exact:true}).click();
  await dialog.getByLabel('Exercise 1 row 1 Reps',{exact:true}).fill('7');
  await dialog.getByLabel('Exercise 1 row 1 Sets',{exact:true}).fill('4');
@@ -46,8 +46,28 @@ test('coach program editor Save reaches both existing athletes on reopened mobil
  await dialog.waitFor({state:'hidden'});
  await coachPage.getByRole('status').filter({hasText:/Program saved/}).waitFor();
  await assertToastConflicts(coachPage);
+ // Read persisted assignment snapshots directly before exercising client
+ // refresh. This distinguishes server propagation from stale UI state.
  for(let i=0;i<athletes.length;i++){
-  const {context,page,errors}=athleteScreens[i];await page.evaluate(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('focus'));});await page.getByRole('button',{name:'W6',exact:true}).waitFor();await page.getByRole('button',{name:'W3',exact:true}).click();const session=page.locator('.training-session').filter({hasText:'Upper 3'});await session.getByText(newExercise.name,{exact:false}).waitFor();const current=await(await req('data','GET',undefined,athletes[i].token)).json(),persisted=current.assignments.find(a=>a.id===assignments[i].id);assert.equal(persisted.weeks,6);assert.equal(persisted.plan[2].sessions[0].exercises[0].sets,4);assert.equal(persisted.plan[2].sessions[0].exercises[0].reps,i===0?6:7);assert.ok(errors.length===0,errors.join('\n'));await context.close();
+  const persisted=(await(await req('data','GET',undefined,athletes[i].token)).json()).assignments.find(a=>a.id===assignments[i].id);
+  assert.ok(persisted,`athlete ${i+1} keeps the original assignment identity`);assert.equal(persisted.weeks,6);assert.ok(persisted.plan[2].sessions[0].exercises.some(e=>e.exerciseId===newExercise.id));assert.equal(persisted.plan[2].sessions[0].exercises[0].sets,4);assert.equal(persisted.plan[2].sessions[0].exercises[0].reps,i===0?6:7);
+ }
+ for(let i=0;i<athletes.length;i++){
+  const {context,page,errors,load}=athleteScreens[i];
+  // Both athletes opened the program and entered values before the coach save.
+  // Isolated headless contexts do not reliably emit real foreground events,
+  // so verify the entry remains until the athlete closes the form, then use
+  // actual navigation back to Training to retrieve the current snapshot.
+  assert.equal(await load.inputValue(),i===0?'177':'179');
+  await page.keyboard.press('Escape');
+  // Return to Training through actual app navigation; no synthetic DOM focus
+  // or visibility events. Then open the saved program again from its details.
+  await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Home',exact:true}).click();
+  await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();
+  await page.getByRole('button',{name:'W6',exact:true}).waitFor();await page.getByRole('button',{name:'W3',exact:true}).click();
+  const session=page.locator('.training-session').filter({hasText:'Upper 3'});await session.getByText(newExercise.name,{exact:false}).waitFor();
+  await page.getByRole('button',{name:'All programs',exact:true}).click();await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByRole('button',{name:'W6',exact:true}).waitFor();
+  const current=await(await req('data','GET',undefined,athletes[i].token)).json(),persisted=current.assignments.find(a=>a.id===assignments[i].id);assert.equal(persisted.weeks,6);assert.equal(persisted.plan[2].sessions[0].exercises[0].sets,4);assert.equal(persisted.plan[2].sessions[0].exercises[0].reps,i===0?6:7);assert.ok(errors.length===0,errors.join('\n'));await context.close();
  }
  await coachContext.close();await apiContext.close();
  async function assertToastConflicts(page){await page.getByRole('status').filter({hasText:/Preserved .*athlete-specific change/i}).waitFor();}
