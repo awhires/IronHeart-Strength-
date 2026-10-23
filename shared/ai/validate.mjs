@@ -102,7 +102,10 @@ export function validateDraft(draft,library=[],requirements={}){
           if(!Number.isInteger(s.day)||s.day<0||s.day>6)add('INVALID_DAY',`${sp}/day`,'Choose a weekday from Sunday (0) to Saturday (6).');
           if(days.has(s.day))add('DUPLICATE_SESSION_DAY',`${sp}/day`,'Two sessions use the same weekday. Confirm that this is intentional.',SEVERITY.WARNING);
           days.add(s.day);
-          if(draft.schemaVersion===2){try{const clean=conditioningSession(s);if(clean.blocks)prepareBlocks(clean.blocks,clean.exercises,library);}catch(e){add('INVALID_WORKOUT_BLOCK',`${sp}/blocks`,e.message);}}
+          if(draft.schemaVersion===2){try{const clean=conditioningSession(s);if(clean.blocks)prepareBlocks(clean.blocks,clean.exercises,library);}catch(e){
+            const path=`${sp}${e.path||'/blocks'}`,blockIndex=/\/blocks\/(\d+)/.exec(e.path||'')?.[1],block=blockIndex===undefined?null:s.blocks?.[Number(blockIndex)];
+            findings.push({code:'INVALID_WORKOUT_BLOCK',severity:SEVERITY.ERROR,message:e.message,path,expected:e.expected||'valid workout block',received:e.received||'invalid structure',repairable:e.repairable===true,sessionNumber:si+1,blockNumber:blockIndex===undefined?null:Number(blockIndex)+1,blockType:['Strength','Hypertrophy','Metcon','Cardio','Accessory','Mobility / Recovery'].includes(block?.type)?block.type:'invalid'});
+          }}
           if(!Array.isArray(s.exercises)||!s.exercises.length&&!s.blocks?.some(b=>b.type==='Metcon')){add('EMPTY_SESSION',`${sp}/exercises`,'Add at least one exercise.');return;}
           s.exercises.forEach((e,ei)=>{
             if(!record(e))return;

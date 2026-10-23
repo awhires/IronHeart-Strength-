@@ -1,8 +1,20 @@
 import {AI_DRAFT_SCHEMA_V2} from '../../shared/ai/conditioning-contract.mjs';
 
 export class GenerationError extends Error {constructor(code,message,status=502){super(`${message} No program was changed or saved.`);this.code=code;this.status=status;}}
-// OpenAI's strict subset: every object property required; semantic limits remain
-// enforced independently by Iron Heart. The application schema stays unchanged.
+const CONNECTION_CODES=new Set(['ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ECONNRESET','ENETUNREACH','EHOSTUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','UND_ERR_SOCKET']);
+const TLS_CODES=new Set(['UNABLE_TO_VERIFY_LEAF_SIGNATURE','UNABLE_TO_GET_ISSUER_CERT_LOCALLY','DEPTH_ZERO_SELF_SIGNED_CERT','ERR_TLS_CERT_ALTNAME_INVALID','CERT_HAS_EXPIRED']);
+function transportFailure(error){
+  const pending=[error],seen=new Set();
+  while(pending.length){const current=pending.pop();if(!current||typeof current!=='object'||seen.has(current))continue;seen.add(current);
+    if(CONNECTION_CODES.has(current.code))return new GenerationError('PROVIDER_CONNECTION','The server could not connect to the AI provider. Check its network and DNS connection.',503);
+    if(TLS_CODES.has(current.code))return new GenerationError('PROVIDER_TLS','The server could not establish a secure connection to the AI provider.',503);
+    pending.push(current.cause,...(Array.isArray(current.errors)?current.errors:[]));
+  }
+  return new GenerationError('PROVIDER_UNAVAILABLE','The AI provider is unavailable. Try again later.');
+}
+// Both provider adapters use this strict-compatible projection. Length limits
+// remain in the application schema for validation; Gemini does not enforce them.
+// Describe omitted constraints so both models see the same source-of-truth limits.
 export function providerSchema(value=AI_DRAFT_SCHEMA_V2){
   if(Array.isArray(value))return value.map(providerSchema);
   if(!value||typeof value!=='object')return value;
@@ -14,6 +26,11 @@ export function providerSchema(value=AI_DRAFT_SCHEMA_V2){
     if(key==='rir'){out[key]={type:'null'};continue;}
     out[key]=providerSchema(item);
   }
+  const guidance=[];
+  if(value.minLength!==undefined)guidance.push(value.minLength===1?'Use at least one non-whitespace character.':`Use at least ${value.minLength} characters.`);
+  if(value.maxLength!==undefined)guidance.push(`Use at most ${value.maxLength} characters.`);
+  if(value.exclusiveMinimum!==undefined)guidance.push(`Use a number greater than ${value.exclusiveMinimum}.`);
+  if(guidance.length)out.description=[out.description,...guidance].filter(Boolean).join(' ');
   if(out.type==='object'){out.additionalProperties=false;out.required=Object.keys(out.properties);}
   return out;
 }
@@ -36,16 +53,19 @@ Include logical progression when requested, varying rep/effort/volume targets co
 Set schemaVersion:2, status:draft, athleteId:null, sourceProgramId:null, originalRequest to the coach_request, validationFindings:[]; Iron Heart owns validation and approval. Do not include private reasoning or chain-of-thought. Keep descriptions and notes concise.`;
 
 export function createOpenAIProvider({apiKey,model='gpt-4.1-mini',timeoutMs=120000,maxOutputTokens=24000,fetchImpl=fetch}){
+  const defaultSchema=providerSchema();
   return {name:'openai',model,async generateProgramDraft(request,context,task){
     if(!apiKey)throw new GenerationError('NOT_CONFIGURED','AI generation is not configured on this server.',503);
-    const controller=new AbortController();let timer;
+    const controller=new AbortController();let timer,onSignalAbort;const cancel=()=>controller.abort(task?.signal?.reason);if(task?.signal?.aborted)cancel();else task?.signal?.addEventListener('abort',cancel,{once:true});const started=performance.now();let headersAt=null,bodyAt=null;const timing=()=>{try{task?.onTiming?.({headersMs:headersAt===null?null:Math.round(headersAt-started),bodyMs:headersAt===null||bodyAt===null?null:Math.round(bodyAt-headersAt),totalMs:Math.round(performance.now()-started)});}catch{}};
     try{
-      const work=(async()=>{
-        const response=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:controller.signal,headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions:task?.instructions||GENERATION_INSTRUCTIONS,input:task?.image?[{role:'user',content:[{type:'input_text',text:JSON.stringify({coach_request:request,...context})},{type:'input_image',image_url:task.image,detail:'high'}]}]:JSON.stringify({coach_request:request,...context}),max_output_tokens:maxOutputTokens,...(model==='gpt-6.1-sol'?{reasoning:{effort:'low'}}:{}),text:{format:{type:'json_schema',name:'iron_heart_workout_draft_v2',strict:true,schema:providerSchema(task?.schema)}}})});
+      const work=(async()=>{if(controller.signal.aborted)throw controller.signal.reason;
+        const response=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:controller.signal,headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions:task?.instructions||GENERATION_INSTRUCTIONS,input:task?.image?[{role:'user',content:[{type:'input_text',text:JSON.stringify({coach_request:request,...context})},{type:'input_image',image_url:task.image,detail:'high'}]}]:JSON.stringify({coach_request:request,...context}),max_output_tokens:maxOutputTokens,...(model==='gpt-6.1-sol'?{reasoning:{effort:'low'}}:{}),text:{format:{type:'json_schema',name:'iron_heart_workout_draft_v2',strict:true,schema:task?.schema?providerSchema(task.schema):defaultSchema}}})});
+        headersAt=performance.now();
         if(!response.ok){await response.body?.cancel();throw new GenerationError(response.status===429?'PROVIDER_RATE_LIMIT':response.status===401||response.status===403?'PROVIDER_AUTH':'PROVIDER_UNAVAILABLE',response.status===429?'The AI provider is rate limited. Try again later.':response.status===401||response.status===403?'AI provider authentication failed. Check the server API key and model access.':'The AI provider could not generate a draft. Try again later.',response.status===429?429:502);}
         const reader=response.body?.getReader();if(!reader)throw new GenerationError('INVALID_OUTPUT','The AI provider returned an empty response.');
         let bytes=0,raw='';const decoder=new TextDecoder();
         while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>600000){await reader.cancel();throw new GenerationError('OUTPUT_TOO_LARGE','The generated response was too large. Request a smaller block.');}raw+=decoder.decode(value,{stream:true});}raw+=decoder.decode();
+        bodyAt=performance.now();
         let result;try{result=JSON.parse(raw);}catch{throw new GenerationError('INVALID_OUTPUT','The AI provider returned unreadable structured output.');}
         task?.onUsage?.(Object.fromEntries(['input_tokens','output_tokens','total_tokens'].filter(k=>Number.isInteger(result.usage?.[k])&&result.usage[k]>=0).map(k=>[k,result.usage[k]])));
         if(result.status!=='completed')throw new GenerationError('INCOMPLETE_OUTPUT',result.incomplete_details?.reason==='max_output_tokens'?'AI output reached its token limit before completing the program. Regenerate with fewer exercises per session, or ask the administrator to increase AI_MAX_OUTPUT_TOKENS.':'AI generation did not finish. Regenerate the complete block; no partial weeks were saved.');
@@ -55,7 +75,7 @@ export function createOpenAIProvider({apiKey,model='gpt-4.1-mini',timeoutMs=1200
         if(!text||text.includes(apiKey))throw new GenerationError('INVALID_OUTPUT','The AI provider returned invalid structured output.');
         try{return JSON.parse(text);}catch{throw new GenerationError('INVALID_OUTPUT','The AI provider returned invalid structured output.');}
       })();
-      return await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new GenerationError('PROVIDER_TIMEOUT','AI generation timed out. Try again or request a smaller block.',504));},Math.min(timeoutMs,task?.timeoutMs??timeoutMs));})]);
-    }catch(error){if(error instanceof GenerationError)throw error;throw new GenerationError('PROVIDER_UNAVAILABLE','The AI provider is unavailable. Try again later.');}finally{clearTimeout(timer);}
+      return await Promise.race([work,new Promise((_,reject)=>{if(controller.signal.aborted)return reject(controller.signal.reason);onSignalAbort=()=>reject(task.signal.reason);task?.signal?.addEventListener('abort',onSignalAbort,{once:true});timer=setTimeout(()=>{controller.abort();reject(new GenerationError('PROVIDER_TIMEOUT','AI generation timed out. Try again or request a smaller block.',504));},Math.min(timeoutMs,task?.timeoutMs??timeoutMs));})]);
+    }catch(error){if(task?.signal?.aborted)throw task.signal.reason instanceof GenerationError?task.signal.reason:new GenerationError('CLIENT_CANCELED','Generation canceled because the connection closed.',499);if(error instanceof GenerationError)throw error;throw transportFailure(error);}finally{clearTimeout(timer);task?.signal?.removeEventListener('abort',cancel);task?.signal?.removeEventListener('abort',onSignalAbort);timing();}
   }};
 }

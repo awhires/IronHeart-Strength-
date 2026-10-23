@@ -9,27 +9,36 @@ export const metconScoreMode=m=>m.scoreMode||((m.scoreType==='AMRAP'||m.scoreTyp
 export const definitionFields=type=>({AMRAP:['durationSeconds'],EMOM:['durationSeconds','intervalSeconds'],Intervals:['rounds','workSeconds','restSeconds'],'For Time':['repScheme','timeCapSeconds'],'Rounds for Time':['repScheme','rounds','timeCapSeconds'],'Rounds + Reps':['durationSeconds'],Chipper:['repScheme','timeCapSeconds'],'Time Cap':['repScheme','timeCapSeconds'],Load:[]})[type]||[];
 const numeric=(v,max=86400)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=max;
 const text=(v,max=2000)=>typeof v==='string'&&v.length<=max;
+const observed=v=>v===undefined?'missing':v===null?'null':Array.isArray(v)?`array length ${v.length}`:typeof v==='string'?`string length ${v.length}`:typeof v==='number'||typeof v==='boolean'?v:typeof v;
+export class WorkoutBlockError extends Error {
+ constructor(message,path,expected,received){super(message);this.path=path;this.expected=expected;this.received=observed(received);this.repairable=false;}
+}
+const invalid=(message,path,expected,received)=>{throw new WorkoutBlockError(message,path,expected,received);};
 export const newMetcon=()=>({name:'',scoreType:'For Time',repScheme:[],movements:[],notes:''});
 export function prepareMetcon(raw,library){
  const m=structuredClone(raw);
- if(!m||!text(m.name,200)||!m.name.trim()||!SCORE_TYPES.includes(m.scoreType)||!text(m.notes||'')||(m.benchmark!==undefined&&typeof m.benchmark!=='boolean'))throw Error('Name the Metcon and choose a scoring type.');
- if(m.format!=null&&!['standard','chipper','intervals'].includes(m.format))throw Error('Choose a valid Metcon format.');
- if(m.scoreMode!=null&&!(SCORE_MODES[m.scoreType]||[]).includes(m.scoreMode))throw Error('Choose a scoring mode for this workout type.');
- if(!Array.isArray(m.repScheme)||m.repScheme.length>100||m.repScheme.some(n=>!Number.isInteger(n)||n<1||n>1000))throw Error('Use a rep scheme such as 50-40-30-20-10.');
- for(const k of ['rounds','durationSeconds','timeCapSeconds','workSeconds','restSeconds','intervalSeconds'])if(m[k]!=null&&!numeric(m[k]))throw Error('Check Metcon rounds and times.');
- if(m.rounds!=null&&(!Number.isInteger(m.rounds)||m.rounds<1))throw Error('Rounds must be a positive whole number.');
- for(const k of ['durationSeconds','timeCapSeconds','workSeconds','intervalSeconds'])if(m[k]!=null&&m[k]<=0)throw Error('Prescribed durations and work intervals must be positive; leave them blank when unspecified.');
- if(m.scoreType==='EMOM'&&m.durationSeconds!=null){const explicitInterval=m.intervalSeconds!=null||m.scoreMode!=null;m.intervalSeconds=m.intervalSeconds??60;if(explicitInterval&&(!(m.intervalSeconds>0)||m.durationSeconds%m.intervalSeconds!==0||m.durationSeconds/m.intervalSeconds>100))throw Error('EMOM duration must contain 1–100 complete work intervals.');}
- if(!Array.isArray(m.movements)||!m.movements.length||m.movements.length>30)throw Error('Add 1–30 Metcon movements.');
- m.movements=m.movements.map(v=>{
-  const e=library.find(e=>e.id===v.exerciseId);if(!e)throw Error('Choose a library movement.');
-  for(const k of ['sets','reps','distance','calories','load','minute'])if(v[k]!=null&&!numeric(v[k],k==='distance'?1000000:10000))throw Error('Check movement targets.');
-  if(v.sets!=null&&(!Number.isInteger(v.sets)||v.sets<1))throw Error('Metcon prescription sets must be a positive whole number.');
-  if(v.load!=null&&!['lbs','kg'].includes(v.loadUnit))throw Error('Choose a load unit.');
-  if(v.distance!=null)convertDistance(v.distance,v.distanceUnit,'m');
-  if(!text(v.notes||''))throw Error('Check movement notes.');
-  if(v.scalingOptions!=null&&(!Array.isArray(v.scalingOptions)||v.scalingOptions.length>10))throw Error('Use up to ten scaling options.');
-  const scalingOptions=v.scalingOptions?.map(o=>preparePerformedMovement(o));
+ if(!m||typeof m!=='object')invalid('Name the Metcon and choose a scoring type.','','Metcon object',m);
+ if(!text(m.name,200)||!m.name.trim())invalid('Name the Metcon and choose a scoring type.','/name','nonempty name up to 200 characters',m.name);
+ if(!SCORE_TYPES.includes(m.scoreType))invalid('Name the Metcon and choose a scoring type.','/scoreType',`one of ${SCORE_TYPES.join(', ')}`,m.scoreType);
+ if(!text(m.notes||''))invalid('Name the Metcon and choose a scoring type.','/notes','text up to 2000 characters',m.notes);
+ if(m.benchmark!==undefined&&typeof m.benchmark!=='boolean')invalid('Name the Metcon and choose a scoring type.','/benchmark','boolean',m.benchmark);
+ if(m.format!=null&&!['standard','chipper','intervals'].includes(m.format))invalid('Choose a valid Metcon format.','/format','standard, chipper, or intervals',m.format);
+ if(m.scoreMode!=null&&!(SCORE_MODES[m.scoreType]||[]).includes(m.scoreMode))invalid('Choose a scoring mode for this workout type.','/scoreMode',`${m.scoreType} scoring mode or null`,m.scoreMode);
+ if(!Array.isArray(m.repScheme)||m.repScheme.length>100||m.repScheme.some(n=>!Number.isInteger(n)||n<1||n>1000))invalid('Use a rep scheme such as 50-40-30-20-10.','/repScheme','array of up to 100 positive integer reps',m.repScheme);
+ for(const k of ['rounds','durationSeconds','timeCapSeconds','workSeconds','restSeconds','intervalSeconds'])if(m[k]!=null&&!numeric(m[k]))invalid('Check Metcon rounds and times.',`/${k}`,'number from 0 to 86400 or null',m[k]);
+ if(m.rounds!=null&&(!Number.isInteger(m.rounds)||m.rounds<1))invalid('Rounds must be a positive whole number.','/rounds','positive integer or null',m.rounds);
+ for(const k of ['durationSeconds','timeCapSeconds','workSeconds','intervalSeconds'])if(m[k]!=null&&m[k]<=0)invalid('Prescribed durations and work intervals must be positive; leave them blank when unspecified.',`/${k}`,'positive number or null',m[k]);
+ if(m.scoreType==='EMOM'&&m.durationSeconds!=null){const explicitInterval=m.intervalSeconds!=null||m.scoreMode!=null;m.intervalSeconds=m.intervalSeconds??60;if(explicitInterval&&(!(m.intervalSeconds>0)||m.durationSeconds%m.intervalSeconds!==0||m.durationSeconds/m.intervalSeconds>100))invalid('EMOM duration must contain 1–100 complete work intervals.','/intervalSeconds','interval dividing the EMOM duration into 1–100 work intervals',m.intervalSeconds);}
+ if(!Array.isArray(m.movements)||!m.movements.length||m.movements.length>30)invalid('Add 1–30 Metcon movements.','/movements','array of 1–30 library movements',m.movements);
+ m.movements=m.movements.map((v,i)=>{
+  const e=library.find(e=>e.id===v?.exerciseId);if(!e)invalid('Choose a library movement.',`/movements/${i}/exerciseId`,'existing exercise-library ID',v?.exerciseId);
+  for(const k of ['sets','reps','distance','calories','load','minute'])if(v[k]!=null&&!numeric(v[k],k==='distance'?1000000:10000))invalid('Check movement targets.',`/movements/${i}/${k}`,`number from 0 to ${k==='distance'?1000000:10000} or null`,v[k]);
+  if(v.sets!=null&&(!Number.isInteger(v.sets)||v.sets<1))invalid('Metcon prescription sets must be a positive whole number.',`/movements/${i}/sets`,'positive integer or null',v.sets);
+  if(v.load!=null&&!['lbs','kg'].includes(v.loadUnit))invalid('Choose a load unit.',`/movements/${i}/loadUnit`,'lbs or kg when load is prescribed',v.loadUnit);
+  if(v.distance!=null)try{convertDistance(v.distance,v.distanceUnit,'m');}catch(error){invalid(error.message,`/movements/${i}/distanceUnit`,'valid distance unit',v.distanceUnit);}
+  if(!text(v.notes||''))invalid('Check movement notes.',`/movements/${i}/notes`,'text up to 2000 characters',v.notes);
+  if(v.scalingOptions!=null&&(!Array.isArray(v.scalingOptions)||v.scalingOptions.length>10))invalid('Use up to ten scaling options.',`/movements/${i}/scalingOptions`,'array of up to ten options or null',v.scalingOptions);
+  const scalingOptions=v.scalingOptions?.map((o,j)=>{try{return preparePerformedMovement(o);}catch(error){invalid(error.message,`/movements/${i}/scalingOptions/${j}`,'valid substitute movement',o);}});
   return {exerciseId:e.id,exerciseName:e.name,...(scalingOptions?{scalingOptions}:{}),...Object.fromEntries(['sets','reps','distance','distanceUnit','calories','load','loadUnit','minute','notes'].filter(k=>v[k]!=null).map(k=>[k,v[k]]))};
  });return m;
 }
@@ -62,17 +71,21 @@ export function prepareMetconScore(raw,m){
 // Layout references the canonical exercises array, never a duplicate strength prescription.
 export function prepareBlocks(blocks,exercises,library){
  if(blocks===undefined)return undefined;
- if(!Array.isArray(blocks)||!blocks.length||blocks.length>20)throw Error('Use 1–20 workout blocks.');
+ if(!Array.isArray(blocks)||!blocks.length||blocks.length>20)invalid('Use 1–20 workout blocks.','/blocks','array of 1–20 blocks',blocks);
  const seen=new Set(),ids=new Set();
  const clean=blocks.map((b,i)=>{
-  if(!BLOCK_TYPES.includes(b.type)||!text(b.name||'',200))throw Error('Choose a valid block type.');
-  const id=b.id||`block-${i}`;if(typeof id!=='string'||ids.has(id))throw Error('Block IDs must be unique.');ids.add(id);
-  if(b.type==='Metcon')return {id,type:b.type,name:b.name||'',metcon:prepareMetcon(b.metcon,library)};
-  if(!Array.isArray(b.exerciseIndexes)||!b.exerciseIndexes.length)throw Error('Add exercises to each block.');
-  for(const n of b.exerciseIndexes){if(!Number.isInteger(n)||n<0||n>=exercises.length||seen.has(n))throw Error('Each exercise must belong to exactly one block.');seen.add(n);}
+  if(!b||!BLOCK_TYPES.includes(b.type))invalid('Choose a valid block type.',`/blocks/${i}/type`,`one of ${BLOCK_TYPES.join(', ')}`,b?.type);
+  if(!text(b.name||'',200))invalid('Choose a valid block type.',`/blocks/${i}/name`,'string up to 200 characters',b.name);
+  const id=b.id||`block-${i}`;if(typeof id!=='string'||ids.has(id))invalid('Block IDs must be unique.',`/blocks/${i}/id`,'unique string block ID',b.id);ids.add(id);
+  if(b.type==='Metcon'){
+   try{return {id,type:b.type,name:b.name||'',metcon:prepareMetcon(b.metcon,library)};}
+   catch(error){if(error instanceof WorkoutBlockError){error.path=`/blocks/${i}/metcon${error.path}`;throw error;}invalid(error.message,`/blocks/${i}/metcon`,'valid Metcon prescription',b.metcon);}
+  }
+  if(!Array.isArray(b.exerciseIndexes)||!b.exerciseIndexes.length)invalid('Add exercises to each block.',`/blocks/${i}/exerciseIndexes`,'nonempty array of exercise indexes',b.exerciseIndexes);
+  for(const [j,n] of b.exerciseIndexes.entries()){if(!Number.isInteger(n)||n<0||n>=exercises.length||seen.has(n))invalid('Each exercise must belong to exactly one block.',`/blocks/${i}/exerciseIndexes/${j}`,`unique integer index from 0 to ${exercises.length-1}`,n);seen.add(n);}
   return {id,type:b.type,name:b.name||'',exerciseIndexes:[...b.exerciseIndexes]};
  });
- if(seen.size!==exercises.length)throw Error('Each exercise must belong to a block.');return clean;
+ if(seen.size!==exercises.length)invalid('Each exercise must belong to a block.','/blocks','every exercise index assigned exactly once',`${exercises.length-seen.size} unassigned`);return clean;
 }
 export function recordBlockScores(scores,blocks=[]){
  const targets=blocks.filter(b=>b.type==='Metcon');

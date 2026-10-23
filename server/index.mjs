@@ -16,6 +16,8 @@ import { periodize, recommend } from './progression.mjs';
 import {prepareProgram,prepareSession,prepareItems,recordPerformance,normalizeData} from '../shared/prescriptions.mjs';
 import {createDraftSaveService} from '../shared/ai/save-service.mjs';
 import {createGenerationService,generationConfig,validateGenerationInput} from './ai/generation.mjs';
+import {createStagedGenerationService} from './ai/staged.mjs';
+import {createGenerationJobs} from './ai/generation-jobs.mjs';
 import {GenerationError} from './ai/openai.mjs';
 import {createTrainingAnswerService} from './ai/training-answers.mjs';
 import {FIELDS} from '../shared/tracking.mjs';
@@ -26,8 +28,9 @@ const production=process.argv.includes('--production');
 const lanPreview=process.argv.includes('--lan-preview');
 if(production&&lanPreview)throw Error('LAN preview cannot run in production.');
 if(process.env.AI_TEST_FIXTURE&&!process.argv.includes('--test-server'))throw Error('AI_TEST_FIXTURE is allowed only with --test-server.');
-const testProvider=process.env.AI_TEST_FIXTURE?{name:'test-fixture',model:'fixture',generateProgramDraft:async()=>JSON.parse(await readFile(process.env.AI_TEST_FIXTURE,'utf8'))}:undefined;
+const testProvider=process.env.AI_TEST_FIXTURE?{name:'test-fixture',model:'fixture',generateProgramDraft:async(request,context,task={})=>{const fixture=JSON.parse(await readFile(process.env.AI_TEST_FIXTURE,'utf8'));const stage=task.schema?.properties?.trainingDays?'outline':task.schema?.properties?.sessions?`week:${context.requested_week}`:'legacy';if(fixture.delayStage===stage&&fixture.delayMs)await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,fixture.delayMs);task.signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(task.signal.reason);},{once:true});});if(fixture.testUsage)task.onUsage?.(fixture.testUsage);if(fixture.testTiming)task.onTiming?.(fixture.testTiming);return stage==='outline'?fixture.outline:stage.startsWith('week:')?fixture.weeks?.[context.requested_week-1]:fixture;}}:undefined;
 const generation=createGenerationService({config:generationConfig(),provider:testProvider,production});
+const staged=createStagedGenerationService({config:generationConfig(),provider:testProvider,...(process.argv.includes('--test-server')&&process.env.AI_TEST_DEADLINE_MS?{deadlineMs:Number(process.env.AI_TEST_DEADLINE_MS)}:{})});
 const qaConfig=generationConfig();
 const trainingAnswers=createTrainingAnswerService({apiKey:qaConfig.provider==='openai'&&qaConfig.enabled?qaConfig.apiKey:'',model:qaConfig.model,timeoutMs:Math.min(qaConfig.timeoutMs,30000),requestsPerHour:qaConfig.requestsPerHour});
 const scanner=createScanService();
@@ -35,6 +38,7 @@ const demo=process.env.DEMO_MODE === 'true' || (!production && process.env.DEMO_
 if (production && demo) throw new Error('Demo mode cannot run in production. Use a separate production database.');
 const store=openStore(process.env.DB_PATH || `./data/${demo?'demo':'iron-heart'}.sqlite`,demo);
 const {db,all,get,put,addUser}=store;
+const generationJobs=createGenerationJobs({db,staged,config:generationConfig(),library:()=>all('exercise'),athleteFor:id=>db.prepare("SELECT id,sport FROM users WHERE id=? AND role='athlete'").get(id)});
 const workoutReceipt=workoutReceipts(store);
 if (!demo && db.prepare("SELECT id FROM users WHERE email LIKE '%@ironheart.demo' LIMIT 1").get()) throw new Error('Demo database cannot be used in production.');
 const publicUser = u => ({id:u.id,email:u.email,name:u.name,role:u.role,sport:u.sport});
@@ -70,7 +74,7 @@ const server=http.createServer(async(req,res)=>{
     const origin=req.headers.origin;
     const ownOrigin=`${production?'https':'http'}://${req.headers.host}`;
     if(origin && origin!==ownOrigin && !allowed.includes(origin))fail(403,'Origin not allowed.');
-    if(origin&&allowed.includes(origin)){res.setHeader('Access-Control-Allow-Origin',origin);res.setHeader('Vary','Origin');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, DELETE, OPTIONS');}
+    if(origin&&allowed.includes(origin)){res.setHeader('Access-Control-Allow-Origin',origin);res.setHeader('Vary','Origin');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization, Idempotency-Key');res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, DELETE, OPTIONS');}
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end();}
     const b=['POST','PUT','DELETE'].includes(req.method)?await body(req,url.pathname==='/api/ai/workout-scan'?5700000:200000):{};
     let result;
@@ -118,7 +122,22 @@ const server=http.createServer(async(req,res)=>{
       else if(route==='/api/ai/program-draft'&&req.method==='POST'){
         coach();const library=all('exercise');const input=validateGenerationInput(b,library);
         const athlete=input.athleteId?db.prepare("SELECT id,sport FROM users WHERE id=? AND role='athlete'").get(input.athleteId):null;
-        result=await generation.generateProgramDraft(input,{coachId:u.id,library,athlete});
+        const controller=new AbortController(),onClose=()=>{if(!res.writableEnded)controller.abort(new GenerationError('CLIENT_CANCELED','Generation canceled because the connection closed.',499));};res.once('close',onClose);
+        try{result=await generation.generateProgramDraft(input,{coachId:u.id,library,athlete,signal:controller.signal});}finally{res.off('close',onClose);}
+      }
+      else if(route==='/api/ai/jobs'&&req.method==='GET'){coach();result=generationJobs.list(u.id);}
+      else if(route==='/api/ai/jobs'&&req.method==='POST'){coach();result=generationJobs.create(u.id,b,req.headers['idempotency-key']);}
+      else if(route.startsWith('/api/ai/jobs/')){
+        coach();const match=route.match(/^\/api\/ai\/jobs\/([\w-]+)(?:\/(next|retry|resume|cancel))?$/);
+        if(!match)fail(404,'Generation job not found.');
+        const [,jobId,action]=match;
+        if(req.method==='GET'&&!action)result=generationJobs.get(u.id,jobId);
+        else if(req.method==='POST'&&action==='cancel')result=generationJobs.cancel(u.id,jobId);
+        else if(req.method==='POST'&&['next','retry','resume'].includes(action)){
+          const controller=new AbortController(),onClose=()=>{if(!res.writableEnded)controller.abort(new GenerationError('CLIENT_DISCONNECTED','The phone connection closed.',499));};
+          res.once('close',onClose);
+          try{result=await generationJobs.run(u.id,jobId,action,req.headers['idempotency-key'],{signal:controller.signal});}finally{res.off('close',onClose);}
+        }else fail(404,'Generation job endpoint not found.');
       }
       else if(route==='/api/ai/approve'&&req.method==='POST'){coach();result=checked(()=>draftSaves.approve(b,all('exercise'),u.id));}
       else if(route==='/api/ai/programs'&&req.method==='POST'){coach();result=checked(()=>draftSaves.save(b,all('exercise'),u.id,p=>put('program',prepareProgram(p,all('exercise')))));}
@@ -192,7 +211,7 @@ const server=http.createServer(async(req,res)=>{
       else fail(404,'Not found.');
     }
     res.end(JSON.stringify(route==='/api/data'?withAthleteRecommendations(normalizeData(result)):result));
-  }catch(error){res.writeHead(error.status||500);res.end(JSON.stringify({error:error.status?error.message:'Something went wrong. Please try again.',...(error instanceof GenerationError?{code:error.code}:{})}));if(!error.status)console.error(error);}
+  }catch(error){if(res.destroyed)return;res.writeHead(error.status||500);res.end(JSON.stringify({error:error.status?error.message:'Something went wrong. Please try again.',...(error instanceof GenerationError?{code:error.code,...(error.diagnostics?{diagnostics:error.diagnostics}:{})}:{})}));if(!error.status)console.error(error);}
 });
 // The explicit development mode overrides stale HOST/PORT values from local env files.
 // Production and ordinary local development retain their existing bind defaults.
