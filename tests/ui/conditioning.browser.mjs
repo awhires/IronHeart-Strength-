@@ -7,6 +7,7 @@ import {once} from 'node:events';
 import {mkdtemp,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
+import {scheduledDate} from '../../shared/program-schedule.mjs';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 test('desktop and mobile: library selector opens, filters and adds; M:SS and mixed blocks save',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'ih-ui-'));
@@ -70,7 +71,7 @@ test('desktop and mobile: library selector opens, filters and adds; M:SS and mix
   await page.request.post(base+'/api/demo',{data:{role:'athlete'}});await page.goto(base);await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(a.id);await page.getByRole('button',{name:'W1',exact:true}).click();
   await page.locator('.training-session').filter({hasText:'AMRAP assessment'}).getByRole('button').first().click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Total reps',{exact:true}).waitFor();assert.equal(await dialog.getByText('Total reps',{exact:true}).count(),1);assert.equal(await dialog.getByText('Additional reps',{exact:true}).count(),0);assert.equal(await dialog.getByText('Completion time (M:SS)',{exact:true}).count(),0);
   await dialog.getByLabel('Total reps',{exact:true}).fill('147');await dialog.getByLabel('RX / scaled').selectOption('RX');await dialog.getByRole('button',{name:'Complete workout',exact:true}).click();await dialog.waitFor({state:'hidden'});
-  await page.locator('.training-session').filter({hasText:'EMOM assessment'}).getByRole('button').first().click();const emom=page.getByRole('dialog');await emom.getByLabel('Successful intervals',{exact:true}).waitFor();assert.equal(await emom.getByText('Successful intervals',{exact:true}).count(),1);assert.equal(await emom.getByText('Total reps',{exact:true}).count(),0);
+  const emomDate=scheduledDate(a,1,1);await page.locator(`.training-day[data-date="${emomDate}"]`).click();assert.equal(await page.locator('.training-session').count(),1);await page.locator('.training-session').filter({hasText:'EMOM assessment'}).getByRole('button').first().click();const emom=page.getByRole('dialog');await emom.getByLabel('Successful intervals',{exact:true}).waitFor();assert.equal(await emom.getByText('Successful intervals',{exact:true}).count(),1);assert.equal(await emom.getByText('Total reps',{exact:true}).count(),0);
   await emom.getByLabel('Successful intervals',{exact:true}).fill('10');await emom.getByLabel('RX / scaled').selectOption('RX');await emom.getByRole('button',{name:'Complete workout',exact:true}).click();await emom.waitFor({state:'hidden'});
   const logs=(await(await page.request.get(base+'/api/data')).json()).logs.filter(l=>l.assignmentId===a.id);assert.equal(logs.length,2);assert.equal(logs.find(l=>l.session===0).blockResults[0].score.totalReps,147);assert.equal(logs.find(l=>l.session===1).blockResults[0].score.successfulIntervals,10);await context.close();
  });

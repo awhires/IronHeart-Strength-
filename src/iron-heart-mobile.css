@@ -255,3 +255,13 @@ input:focus,select:focus,textarea:focus{
  .athlete-calendar .calendar-rest span{margin:0}
  .athlete-calendar .move-link{font-size:11px;margin:0 0 5px}
 }
+/* Compact seven-day Training calendar. */
+.training-date-panel{padding:12px 10px;min-width:0}
+.training-date-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:12px}
+.training-date-heading>div{display:flex;gap:4px}.training-date-heading button{background:#ffffff0b;color:#f4f5f7;border:1px solid #ffffff23;border-radius:7px;min-width:30px;min-height:30px;padding:2px 8px}
+.training-day-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;touch-action:pan-y;user-select:none}
+.training-day{display:grid;justify-items:center;gap:3px;min-width:0;padding:7px 1px 5px;background:#ffffff06;color:#e8edf0;border:1px solid #ffffff12;border-radius:8px}
+.training-day small{font-size:10px;color:#bbc3cb}.training-day strong{font-size:15px;line-height:1.1}.training-day.today{border-color:#d824307d}.training-day.selected{background:linear-gradient(#8e1e2aab,#3c151bc4);border-color:#f24451ad;box-shadow:0 0 12px #d824302b}.training-day.selected small{color:#fff}
+.training-day-dot{width:5px;height:5px;border-radius:50%;background:transparent}.training-day-dot.scheduled{background:#e14b55}.training-day-dot.completed{background:#59d7af}.training-day-dot.missed,.training-day-dot.skipped{background:#efb362}
+.training-day-legend{display:flex;justify-content:space-around;gap:4px;margin-top:8px;color:#acb4ba;font-size:9px}.training-day-legend span:first-child{color:#e14b55}.training-day-legend span:nth-child(2){color:#59d7af}.training-day-legend span:last-child{color:#efb362}.training-rest{margin:0;font-size:12px;color:#b7bec6}
+@media(max-width:390px){.training-day{padding-inline:0}.training-date-panel{padding-inline:8px}.training-day-legend{font-size:8px}}

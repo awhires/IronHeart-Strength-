@@ -31,7 +31,7 @@ test('actual completion/recovery persist without adding recovery to work totals 
  const entries=[{exerciseId:'rowerg',sets:[{distance:500,distanceUnit:'m',durationSeconds:110,recoverySeconds:90,completed:true},{distance:500,distanceUnit:'m',durationSeconds:120,recoverySeconds:80,completed:false}]}];
  const saved=recordPerformance(entries,[target],library)[0];assert.equal(saved.sets[0].recoverySeconds,90);assert.equal(saved.sets[1].completed,false);assert.deepEqual(saved.target,target);
  assert.deepEqual(cardioWorkTotals(saved.sets),{durationSeconds:230,meters:1000,recoverySeconds:170});
- const stats=cardioStats([{id:'1',athleteId:'jordan',createdAt:'2026-10-08',exercises:[saved]}],library.find(e=>e.id==='rowerg'),'jordan');assert.equal(stats.totals.seconds,230);
+ const stats=cardioStats([{id:'1',athleteId:'jordan',createdAt:'2026-10-08',exercises:[saved]}],library.find(e=>e.id==='rowerg'),'jordan');assert.equal(stats.totals.seconds,110);assert.equal(stats.totals.meters,500); // Progress counts completed work only.
  assert.throws(()=>recordPerformance([{...entries[0],sets:entries[0].sets.map(s=>({...s,recoverySeconds:-1}))}],[target],library));
 });
 const scan=exercises=>reviewScan({sessionName:'Scan',notes:'',warnings:[],exercises},library);

@@ -7,22 +7,26 @@ export function cardioMetrics(s,type){
  let meters=null;try{if(positive(s.distance))meters=convertDistance(s.distance,unit,'m');}catch{}
  const seconds=positive(s.durationSeconds)?s.durationSeconds:null;
  const paceUnit=s.paceUnit||unit;const paceBase=type==='erg'?500:type==='swimming'?(unit==='yd'?91.44:100):paceUnit==='km'?1000:paceUnit==='m'?1:paceUnit==='yd'?.9144:1609.344;
+ // A logged running work interval can omit distance when the athlete entered actual
+ // duration and pace. Never infer this from the exercise's prescribed intervals.
+ const derivedDistance=type==='running'&&!meters&&seconds&&positive(s.paceSeconds);
+ if(derivedDistance)meters=seconds/s.paceSeconds*paceBase;
  const speed=meters&&seconds?meters/seconds:positive(s.speedMph)?s.speedMph*.44704:positive(s.paceSeconds)?paceBase/s.paceSeconds:null;
- return {meters,seconds,speed,paceSeconds:speed?paceBase/speed:null,paceBase,watts:positive(s.watts)?s.watts:null,cadence:positive(s.cadence)?s.cadence:null,calories:positive(s.calories)?s.calories:null,steps:positive(s.steps)?s.steps:null,floors:positive(s.floors)?s.floors:null};
+ return {meters,seconds,speed,paceSeconds:speed?paceBase/speed:null,paceBase,distanceDerived:!!derivedDistance,watts:positive(s.watts)?s.watts:null,cadence:positive(s.cadence)?s.cadence:null,calories:positive(s.calories)?s.calories:null,steps:positive(s.steps)?s.steps:null,floors:positive(s.floors)?s.floors:null};
 }
 const change=(n,b)=>positive(b)?(n-b)/b*100:null;
 export function cardioStats(logs,exercise,athleteId){
  const type=trackingProfile(exercise),sessions=[];
  for(const l of logs){if(l.athleteId!==athleteId)continue;
   const entries=(l.exercises||[]).filter(e=>e.exerciseId===exercise.id);if(!entries.length)continue;
-  const sets=entries.flatMap(e=>e.sets||[]),metrics=sets.map(s=>cardioMetrics(s,type));
+  const sets=entries.flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false&&e.status!=='skipped'&&l.status!=='skipped'));if(!sets.length)continue;const metrics=sets.map(s=>cardioMetrics(s,type));
   const sum=k=>metrics.some(m=>m[k]!=null)?metrics.reduce((n,m)=>n+(m[k]||0),0):null;
   const mean=k=>{const ms=metrics.map((m,i)=>({v:m[k],w:m.seconds||1})).filter(m=>m.v!=null);return ms.length?ms.reduce((n,m)=>n+m.v*m.w,0)/ms.reduce((n,m)=>n+m.w,0):null;};
-  const meters=sum('meters'),seconds=sum('seconds'),complete=metrics.every(m=>m.meters&&m.seconds);
+  const meters=sum('meters'),seconds=sum('seconds'),complete=metrics.length>0&&metrics.every(m=>m.meters&&m.seconds);
   // Incomplete totals never produce a fabricated pace. Explicit speed/pace remains usable.
   const speed=complete?meters/seconds:metrics.every(m=>m.speed!=null)?mean('speed'):null;
   const context=JSON.stringify([sets.map(s=>[s.incline??null,s.level??null]),entries.map(e=>[e.intervals||[],e.target?.restSeconds||0])]);
-  sessions.push({id:l.id,name:l.sessionName,date:workoutDate(l),createdAt:l.createdAt,meters,seconds,speed,watts:mean('watts'),cadence:mean('cadence'),calories:sum('calories'),stepRate:seconds&&sum('steps')?sum('steps')/seconds*60:null,floorRate:seconds&&sum('floors')?sum('floors')/seconds*60:null,context,complete});
+  sessions.push({id:l.id,name:l.sessionName,date:workoutDate(l),createdAt:l.createdAt,meters,seconds,speed,distanceDerived:metrics.some(m=>m.distanceDerived),watts:mean('watts'),cadence:mean('cadence'),calories:sum('calories'),stepRate:seconds&&sum('steps')?sum('steps')/seconds*60:null,floorRate:seconds&&sum('floors')?sum('floors')/seconds*60:null,context,complete});
  }
  sessions.sort((a,b)=>(a.date||'').localeCompare(b.date||'')||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id).localeCompare(String(b.id)));
  const latest=sessions.at(-1)||null;

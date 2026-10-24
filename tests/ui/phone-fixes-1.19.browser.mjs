@@ -1,0 +1,35 @@
+import {createRequire} from 'node:module';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {scheduledDate} from '../../shared/program-schedule.mjs';
+
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+test('390px Training calendar swipes seven days, filters workouts, marks completion and keeps logger dark',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-phone-119-')),port='4229',base=`http://127.0.0.1:${port}`;
+ const server=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:port,HOST:'127.0.0.1',DB_PATH:join(dir,'test.sqlite'),DEMO_MODE:'true',AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});
+ let output='',browser;server.stdout.on('data',c=>output+=c);server.stderr.on('data',c=>output+=c);
+ t.after(async()=>{await browser?.close();if(server.exitCode===null){const done=once(server,'exit');server.kill();await done;}await rm(dir,{recursive:true,force:true});});
+ for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(resolve=>setTimeout(resolve,50));assert.match(output,/Iron Heart Strength:/);
+ browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.request.post(base+'/api/demo',{data:{role:'coach'}});
+ const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+ const create=await page.request.post(base+'/api/programs',{data:{name:'Eight-week phone calendar',goal:'Strength',weeks:8,sessions:[{name:'Calendar Bench',day:now.getDay(),exercises:[{exerciseId:'bench',sets:3,reps:5,load:185,rest:120}]}]}});assert.equal(create.status(),200,await create.text());const program=await create.json();
+ const assigned=await page.request.post(base+'/api/assign',{data:{programId:program.id,athleteId:'jordan',startDate:today}});assert.equal(assigned.status(),200,await assigned.text());const assignment=await assigned.json();
+ await page.request.post(base+'/api/demo',{data:{role:'athlete'}});await page.goto(base);await page.getByRole('navigation',{name:'Athlete navigation'}).getByRole('button',{name:'Training',exact:true}).click();await page.getByLabel('Current program',{exact:true}).selectOption(assignment.id);
+ await page.getByRole('button',{name:'W1',exact:true}).click();const firstDate=scheduledDate(assignment,1,0);assert.equal(await page.locator('.training-day').count(),7);assert.equal(await page.locator(`.training-day[data-date="${firstDate}"]`).getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.training-session').count(),1);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.getByRole('button',{name:'Next training week'}).click();assert.equal(await page.locator('.training-session').count(),1);const week2=scheduledDate(assignment,2,0);assert.equal(await page.locator(`.training-day[data-date="${week2}"]`).getAttribute('aria-pressed'),'true');
+ await page.locator('.training-day-strip').evaluate(element=>{const start=new Touch({identifier:1,target:element,clientX:40,clientY:200}),end=new Touch({identifier:1,target:element,clientX:170,clientY:200});element.dispatchEvent(new TouchEvent('touchstart',{touches:[start],bubbles:true}));element.dispatchEvent(new TouchEvent('touchend',{changedTouches:[end],bubbles:true}));});
+ assert.equal(await page.locator(`.training-day[data-date="${firstDate}"]`).getAttribute('aria-pressed'),'true');
+ await page.locator('.training-session .calendar-event').click();const dialog=page.getByRole('dialog'),quick=dialog.locator('.repeated-set-quick');await quick.waitFor();const style=await quick.evaluate(element=>({image:getComputedStyle(element).backgroundImage,color:getComputedStyle(element).color,input:getComputedStyle(element.querySelector('input')).color}));assert.match(style.image,/gradient/);for(const value of [style.color,style.input])assert.ok((value.match(/\d+/g)||[]).slice(0,3).every(channel=>Number(channel)>=220),value);
+ await dialog.getByLabel('Bench Press Sets completed',{exact:true}).fill('3');await dialog.getByLabel('Bench Press Load',{exact:true}).fill('185');await dialog.getByLabel('Bench Press Reps',{exact:true}).fill('5');await quick.getByRole('button',{name:'Apply to All Sets'}).click();await dialog.getByRole('button',{name:'Complete workout'}).click();await dialog.waitFor({state:'hidden'});
+ assert.ok((await page.locator(`.training-day[data-date="${firstDate}"]`).getAttribute('aria-label')).includes('completed'));
+ await page.getByRole('button',{name:'W8',exact:true}).click();const week8=scheduledDate(assignment,8,0);assert.equal(await page.locator(`.training-day[data-date="${week8}"]`).getAttribute('aria-pressed'),'true');assert.equal(await page.locator('.training-session').count(),1);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
+ await context.close();
+});
