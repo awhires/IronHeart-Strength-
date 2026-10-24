@@ -44,7 +44,7 @@ function shape(value,schema,path,add){
 
 export function validReference(e,library){
   const r=e?.reference1RM;
-  return validMaximum(r,e?.exerciseId)&&library.some(x=>x.id===r.exerciseId);
+  return validMaximum(r,e?.referenceExerciseId||e?.exerciseId)&&library.some(x=>x.id===r.exerciseId);
 }
 export function percentageLoad(e,library){
   if(e?.loadMode!==LOAD_MODE.PERCENTAGE||!validReference(e,library)||!Object.values(LOAD_UNIT).includes(e.loadUnit)||!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100||!number(e.increment)||e.increment<0.25||e.increment>25)return null;
@@ -122,7 +122,7 @@ export function validateDraft(draft,library=[],requirements={}){
               if(e.trackingType==='carry'&&(!number(m.distance)||m.distance<=0||!['m','km','mi','yd'].includes(m.distanceUnit)))add('INVALID_CARRY_DISTANCE',`${ep}/metrics/distance`,'Carry prescriptions need a positive distance and unit.');
               if(m.rpe!=null&&(!number(m.rpe)||m.rpe<1||m.rpe>10))add('INVALID_MOVEMENT_RPE',`${ep}/metrics/rpe`,'Optional RPE must be 1–10.');
               if(['loadedTimed','carry'].includes(e.trackingType)){
-                if(!['fixed','percentage','athlete_selected','none'].includes(e.loadMode))add('INVALID_MOVEMENT_LOAD_MODE',`${ep}/loadMode`,'Choose fixed, percentage, athlete-selected, or no external load.');
+                if(!Object.values(LOAD_MODE).includes(e.loadMode))add('INVALID_MOVEMENT_LOAD_MODE',`${ep}/loadMode`,'Choose a supported strength load method.');
                 if(e.loadMode==='percentage'){
                   const reference=library.find(x=>x.id===e.referenceExerciseId);
                   if(!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100)add('INVALID_MOVEMENT_PERCENTAGE',`${ep}/percent1RM`,'Percentage must be between 1 and 100.');
@@ -131,22 +131,29 @@ export function validateDraft(draft,library=[],requirements={}){
                 }else if(e.loadMode==='fixed'){
                   if(!number(m.load)||m.load<=0||m.load>1200||!['lbs','kg'].includes(m.loadUnit))add('INVALID_MOVEMENT_LOAD',`${ep}/metrics/load`,'A fixed loaded movement needs a positive load and weight unit.');
                   if(e.percent1RM!=null||e.referenceExerciseId!=null)add('CONFLICTING_MOVEMENT_REFERENCE',`${ep}/loadMode`,'Remove percentage-reference fields from a fixed-load movement.');
+                }else if(e.loadMode==='bodyweight'){
+                  if(m.load!=null&&(!number(m.load)||m.load<0||m.load>1200))add('INVALID_MOVEMENT_ADDED_LOAD',`${ep}/metrics/load`,'Optional added bodyweight load must be 0–1200.');
+                }else if(e.loadMode==='previous_performance'){
+                  if(!number(e.loadDelta)||e.loadDelta < -200||e.loadDelta>200)add('INVALID_MOVEMENT_LOAD_DELTA',`${ep}/loadDelta`,'Choose a change between −200 and +200.');
+                  if(m.load!=null)add('CONFLICTING_MOVEMENT_LOAD',`${ep}/metrics/load`,'Previous Performance ± resolves from completed actual sets, not a fixed target.');
                 }else if(m.load!=null&&m.load!==0)add('CONFLICTING_MOVEMENT_LOAD',`${ep}/metrics/load`,'Athlete-selected or no-load movement targets must not contain a prescribed external load.');
+                if(e.loadMode!=='previous_performance'&&e.loadDelta!=null)add('CONFLICTING_MOVEMENT_DELTA',`${ep}/loadDelta`,'Load change requires Previous Performance ±.');
               }
               return;
             }
             if(e.trackingType){if(!CARDIO_TYPES.includes(e.trackingType)){add('INVALID_TRACKING_TYPE',`${ep}/trackingType`,'Choose a supported exercise measurement profile.');return;}try{validateCardioPrescription(conditioningSession({exercises:[e]}).exercises[0],library);}catch(err){add('INVALID_CARDIO_PRESCRIPTION',ep,err.message);}return;}
             if(known&&CARDIO_TYPES.includes(trackingProfile(known)))add('CARDIO_REQUIRES_TYPED_PRESCRIPTION',ep,'Use a v2 cardio prescription with distance/time metrics, not strength sets/reps.');
             if(e.loadMode===LOAD_MODE.FIXED&&e.load!==null&&(!number(e.load)||e.load<=0))add('INVALID_LOAD',`${ep}/load`,'A fixed load must be positive or intentionally unspecified.');
-            if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&e.load!==0)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Bodyweight cannot have a fixed external load.');
+            if(e.loadMode===LOAD_MODE.BODYWEIGHT&&e.load!==null&&(!number(e.load)||e.load<0||e.load>1200))add('INVALID_BODYWEIGHT_ADDED_LOAD',`${ep}/load`,'Optional added bodyweight load must be 0–1200.');
             if(e.loadMode===LOAD_MODE.ATHLETE_SELECTED&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'Athlete-selected loading must leave the fixed load unspecified.');
             if(e.referenceLoad!=null){const ref=e.referenceLoad,reference=library.find(x=>x.id===ref?.exerciseId);if(known?.name!=='Speed Bench'||reference?.name!=='Bench Press'||ref.exerciseName!=='Bench Press'||![55,60,65].includes(ref.percent)||e.loadMode!==LOAD_MODE.ATHLETE_SELECTED)add('INVALID_SPEED_BENCH_REFERENCE',`${ep}/referenceLoad`,'Speed Bench may use only 55%, 60% or 65% of the Bench Press 1RM; keep actual load athlete-selected.');}
             if(e.loadMode===LOAD_MODE.NONE&&e.load!==null)add('CONFLICTING_LOAD_MODE',`${ep}/load`,'An unspecified load must be null.');
             if(e.loadMode===LOAD_MODE.PREVIOUS_PERFORMANCE&&(!number(e.loadDelta)||e.loadDelta < -200||e.loadDelta>200))add('INVALID_LOAD_DELTA',`${ep}/loadDelta`,'Previous Performance ± needs a change between −200 and +200.');
-            if(e.loadMode!==LOAD_MODE.PERCENTAGE&&(e.percent1RM!==null||e.reference1RM!==null))add('CONFLICTING_LOAD_MODE',`${ep}/loadMode`,'Percentage and reference maximum require percentage loading.');
+            if(e.loadMode!==LOAD_MODE.PERCENTAGE&&(e.percent1RM!==null||e.reference1RM!==null||e.referenceExerciseId!=null||e.referenceExerciseName!=null))add('CONFLICTING_LOAD_MODE',`${ep}/loadMode`,'Percentage and reference maximum require percentage loading.');
             if(e.loadMode!==LOAD_MODE.PREVIOUS_PERFORMANCE&&e.loadDelta!=null)add('CONFLICTING_LOAD_MODE',`${ep}/loadDelta`,'Load change requires Previous Performance ±.');
             if(e.loadMode===LOAD_MODE.PERCENTAGE){
               if(!number(e.percent1RM)||e.percent1RM<=0||e.percent1RM>100)add('INVALID_PERCENT_1RM',`${ep}/percent1RM`,'Enter a percentage greater than 0 and at most 100.');
+              if(e.referenceExerciseId!=null&&!library.some(x=>x.id===e.referenceExerciseId&&trackingProfile(x)==='strength'&&(!e.referenceExerciseName||x.name===e.referenceExerciseName)))add('INVALID_REFERENCE_EXERCISE',`${ep}/referenceExerciseId`,'Choose a matching strength reference exercise.');
               if(e.reference1RM===null)add('MISSING_REFERENCE_1RM',`${ep}/reference1RM`,'No reference maximum: keep the percentage target; an athlete-specific baseline or coach-entered maximum is needed to suggest weight.',SEVERITY.WARNING,'Enter the matching lift, maximum, unit, source type, and date.');
               else if(!validReference(e,library))add('INVALID_REFERENCE_1RM',`${ep}/reference1RM`,'Check the reference exercise, maximum, unit, type, and calendar date.');
               const calculated=percentageLoad(e,library);

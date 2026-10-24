@@ -20,7 +20,7 @@ export const unitLabel=unit=>unit===LOAD_UNIT.KG?'kg':'lb';
 export function normalizePrescription(item){
   const e=structuredClone(item);
   if(e.referenceLoad===null)delete e.referenceLoad;
-  const defaults={loadMode:number(e.load)?L.FIXED:L.ATHLETE_SELECTED,loadUnit:LOAD_UNIT.LBS,load:null,effortMode:number(e.rpe)?E.RPE:number(e.rir)?E.RIR:E.NONE,rpe:null,rir:null,percent1RM:null,reference1RM:null,tempo:null,increment:defaultIncrement(e.loadUnit),notes:'',progressionInstructions:''};
+  const defaults={loadMode:number(e.load)?L.FIXED:L.ATHLETE_SELECTED,loadUnit:e.metrics?.loadUnit??LOAD_UNIT.LBS,load:null,effortMode:number(e.rpe)?E.RPE:number(e.rir)?E.RIR:E.NONE,rpe:null,rir:null,percent1RM:null,reference1RM:null,tempo:null,increment:defaultIncrement(e.loadUnit??e.metrics?.loadUnit),notes:'',progressionInstructions:''};
   for(const [key,value] of Object.entries(defaults))if(e[key]===undefined)e[key]=value;
   return e;
 }
@@ -36,17 +36,17 @@ export function calculatePercentageLoad({percent1RM,referenceValue,referenceUnit
 }
 export function suggestedLoad(item){
   const e=normalizePrescription(item);
-  if(e.loadMode!==L.PERCENTAGE||!validMaximum(e.reference1RM,e.exerciseId))return null;
+  if(e.loadMode!==L.PERCENTAGE||!validMaximum(e.reference1RM,e.referenceExerciseId||e.exerciseId))return null;
   const result=calculatePercentageLoad({percent1RM:e.percent1RM,referenceValue:e.reference1RM.value,referenceUnit:e.reference1RM.unit,outputUnit:e.loadUnit,increment:e.increment});
   return result&&result.rounded>0&&inPounds(result.rounded,result.unit)<=1200?result:null;
 }
 export function loadText(item){
   const e=normalizePrescription(item);
-  if(e.loadMode===L.BODYWEIGHT)return 'Bodyweight';
+  if(e.loadMode===L.BODYWEIGHT)return number(e.load)&&e.load>0?`Bodyweight + ${e.load} ${unitLabel(e.loadUnit)}`:'Bodyweight';
   if(e.loadMode===L.ATHLETE_SELECTED)return 'Choose load';
   if(e.loadMode===L.PREVIOUS_PERFORMANCE){const delta=Number.isFinite(e.loadDelta)?e.loadDelta:0;return `Previous performance ${delta<0?'−':'+'}${Math.abs(delta)} ${unitLabel(e.loadUnit)}`;}
   if(e.loadMode===L.NONE)return '';
-  if(e.loadMode===L.PERCENTAGE){const target=suggestedLoad(e);return `${e.percent1RM}% 1RM · ${target?`Suggested: ${target.rounded} ${unitLabel(e.loadUnit)}`:'Reference max needed'}`;}
+  if(e.loadMode===L.PERCENTAGE){const target=suggestedLoad(e);return `${e.percent1RM}%${e.referenceExerciseName?` of ${e.referenceExerciseName}`:''} 1RM · ${target?`Suggested: ${target.rounded} ${unitLabel(e.loadUnit)}`:'Reference max needed'}`;}
   return number(e.load)?`${e.load} ${unitLabel(e.loadUnit)}`:'Load needed';
 }
 export function prescriptionText(item){
@@ -63,7 +63,7 @@ export function prescriptionText(item){
   if(e.setBlocks?.length)return e.setBlocks.map(b=>prescriptionText({...e,...b,sets:b.sets??b.count,setBlocks:undefined})).join(' + ');
   return [e.sets==null?'Sets not prescribed':`${e.sets} × ${e.repMode==='max'?'Max Reps':e.reps==null?'reps open':e.reps}`,e.referenceLoad?`${e.referenceLoad.percent}% of ${e.referenceLoad.exerciseName} 1RM`:loadText(e),e.effortMode===E.RPE?`RPE ${e.rpe}`:e.effortMode===E.RIR?`RIR ${e.rir}`:null,e.tempo?`Tempo: ${e.tempo}`:null,e.rest==null?null:`${e.rest}s rest`].filter(Boolean).join(' · ');
 }
-export function initialActualLoad(item){const e=normalizePrescription(item);return e.loadMode===L.FIXED?e.load:e.loadMode===L.BODYWEIGHT?0:e.loadMode===L.PERCENTAGE?suggestedLoad(e)?.rounded??null:null;}
+export function initialActualLoad(item){const e=normalizePrescription(item);return e.loadMode===L.FIXED?e.load:e.loadMode===L.BODYWEIGHT?e.load??0:e.loadMode===L.PERCENTAGE?suggestedLoad(e)?.rounded??null:null;}
 export function prescribedSets(item){const e=normalizePrescription(item);return e.setBlocks?.length?e.setBlocks.flatMap(b=>Array.from({length:b.sets??b.count},()=>normalizePrescription({...e,...b,sets:1,setBlocks:undefined}))):Array.from({length:e.sets??0},()=>e);}
 
 export function validatePrescription(item,library){
@@ -78,7 +78,7 @@ export function validatePrescription(item,library){
         if(!Number.isInteger(item.sets??1)||(item.sets??1)<1||(item.sets??1)>12)throw Error('Sets must be 1–12.');
         if(item.trackingType!=='carry'&&(!range(m.durationSeconds,1,86400)))throw Error('Enter a positive duration in seconds.');
         if(item.trackingType==='carry'&&(!range(m.distance,Number.MIN_VALUE,1000000)||!['m','km','mi','yd'].includes(m.distanceUnit)))throw Error('Enter a valid carry distance and unit.');
-        if(!['fixed','percentage','bodyweight','athlete_selected','none'].includes(mode))throw Error('Choose a supported load mode.');
+        if(!Object.values(L).includes(mode))throw Error('Choose a supported load mode.');
         if(item.trackingType!=='timed'){
           if(mode==='percentage'){
             const reference=library.find(x=>x.id===item.referenceExerciseId);
@@ -86,6 +86,10 @@ export function validatePrescription(item,library){
             if(m.load!=null)throw Error('Percentage targets keep the actual load blank; the athlete load is calculated from their reference-lift history.');
           }else if(mode==='fixed'){
             if(!range(m.load,Number.MIN_VALUE,1200)||!Object.values(LOAD_UNIT).includes(m.loadUnit)||inPounds(m.load,m.loadUnit)>1200)throw Error('Enter a valid fixed movement load and unit.');
+          }else if(mode==='bodyweight'){
+            if(m.load!=null&&(!range(m.load,0,1200)||!Object.values(LOAD_UNIT).includes(m.loadUnit??item.loadUnit??LOAD_UNIT.LBS)))throw Error('Enter a valid optional added bodyweight load and unit.');
+          }else if(mode==='previous_performance'){
+            if(!range(item.loadDelta,-200,200)||m.load!=null)throw Error('Previous Performance ± needs a change from −200 to +200 and no fixed load.');
           }else if(m.load!=null&&m.load!==0)throw Error('Athlete-selected or no-load targets cannot contain a prescribed external load.');
         }
         if(m.rpe!=null&&!range(m.rpe,1,10))throw Error('Optional RPE must be 1–10.');
@@ -105,12 +109,13 @@ export function validatePrescription(item,library){
   check(e.load===null||(range(e.load,0,1200)&&inPounds(e.load,e.loadUnit)<=1200),'Load must be null or a valid weight up to 1200 lb equivalent.');
   if(e.loadMode===L.FIXED)check(e.load===null||number(e.load),'Fixed load must be a weight or unspecified.');
   if(e.loadMode===L.ATHLETE_SELECTED)check(e.load===null,'Athlete-selected loading leaves weight unspecified.');
-  if(e.loadMode===L.BODYWEIGHT)check(e.load===null||e.load===0,'Bodyweight cannot prescribe external weight.');
+  if(e.loadMode===L.BODYWEIGHT)check(e.load===null||range(e.load,0,1200),'Optional added bodyweight load must be 0–1200.');
   if(e.loadMode===L.PREVIOUS_PERFORMANCE){check(e.load===null,'Previous-performance loading must resolve from actual history, not a stored fixed load.');check(Number.isFinite(e.loadDelta)&&range(e.loadDelta,-200,200),'Previous-performance loading needs a change between −200 and +200.');}
   if(e.loadMode!==L.PREVIOUS_PERFORMANCE)check(e.loadDelta===null||e.loadDelta===undefined,'Load change requires Previous Performance ±.');
   if(e.loadMode===L.NONE)check(e.load===null,'No-load prescriptions leave load unspecified.');
   if(e.loadMode===L.PERCENTAGE){
     check(range(e.percent1RM,1,100),'Percentage must be 1–100.');
+    if(e.referenceExerciseId!=null)check(library.some(x=>x.id===e.referenceExerciseId&&trackingProfile(x)==='strength'&&(!e.referenceExerciseName||x.name===e.referenceExerciseName)),'Choose a valid strength reference exercise.');
     check(e.reference1RM===null||object(e.reference1RM),'Reference maximum must be an object or null.');
     const target=suggestedLoad(e);
     if(!target)findings.push({severity:'warning',message:'Reference max needed; no suggested weight is available.'});

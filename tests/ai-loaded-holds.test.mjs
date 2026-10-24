@@ -10,9 +10,27 @@ import {validateDraft,validateDraftStructure} from '../shared/ai/validate.mjs';
 import {approveReview,createReview} from '../shared/ai/draft-state.mjs';
 import {toIronHeartProgram} from '../shared/ai/convert.mjs';
 import {createLocalDemo} from '../src/local-demo.mjs';
+import {LOAD_MODE as L} from '../shared/ai/contract.mjs';
+import {loadModePatch} from '../shared/load-methods.mjs';
 
 const library=[...exercises,...trackingExercises];
 const loadedHold=()=>({exerciseId:'back-rack-hold',exerciseName:'Back Rack Barbell Hold',trackingType:'loadedTimed',sets:4,rest:90,metrics:{durationSeconds:30,load:null,loadUnit:'lbs',distance:null,distanceUnit:null,rpe:null},loadMode:'percentage',percent1RM:80,referenceExerciseId:'squat',referenceExerciseName:'Barbell Back Squat',notes:'',progressionInstructions:''});
+
+test('AI v2 loaded-strength draft accepts all six shared methods, including kg regression',()=>{
+ for(const mode of Object.values(L)){
+  const draft=createFixture();draft.schemaVersion=2;
+  for(const week of draft.program.plan)for(const session of week.sessions){
+   const e=loadedHold();Object.assign(e,loadModePatch(e,mode,{movement:true}));
+   if(mode===L.FIXED)e.metrics.load=100;
+   if(mode===L.BODYWEIGHT)e.metrics.load=25;
+   if(mode===L.PERCENTAGE){e.percent1RM=80;e.referenceExerciseId='squat';e.referenceExerciseName='Barbell Back Squat';}
+   if(mode===L.PREVIOUS_PERFORMANCE){e.loadDelta=-2.5;e.increment=2.5;e.metrics.loadUnit='kg';}
+   session.exercises=[e];session.blocks=[];
+  }
+  assert.deepEqual(validateDraftStructure(draft),[],mode);
+  assert.equal(validateDraft(draft,library).counts.error,0,mode);
+ }
+});
 
 test('AI v2 represents a loaded hold as duration sets with a reference-lift percentage',()=>{
  const draft=createFixture();draft.schemaVersion=2;

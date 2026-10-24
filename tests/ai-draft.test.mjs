@@ -30,10 +30,11 @@ test('AI fixed load may be intentionally open; blank never becomes zero',()=>{
   first(d).load='';assert.equal(validate(d).canApprove,false);
   first(d).load=135;assert.equal(validate(d).canApprove,true);
 });
-test('AI bodyweight and athlete-selected loads retain null and cannot carry fixed loads',()=>{
+test('AI bodyweight permits optional added external load while athlete-selected stays open',()=>{
   const d=createFixture();first(d).loadMode=LOAD_MODE.BODYWEIGHT;assert.equal(validate(d).canApprove,true);
   assert.equal(first(toIronHeartProgramEnvelope(d)).load,null);
-  first(d).load=20;assert.ok(codes(d).includes('CONFLICTING_LOAD_MODE'));
+  first(d).load=20;assert.equal(validate(d).canApprove,true);
+  assert.equal(first(toIronHeartProgramEnvelope(d)).load,20);
   first(d).loadMode=LOAD_MODE.ATHLETE_SELECTED;assert.ok(codes(d).includes('CONFLICTING_LOAD_MODE'));
   first(d).load=null;assert.equal(validate(d).canApprove,true);
 });

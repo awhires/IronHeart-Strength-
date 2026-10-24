@@ -19,7 +19,8 @@ test('all loading modes validate and format without inferring bodyweight',()=>{
   assert.equal(loadText(base()),'185 lb');
   for(const [mode,expected] of [['bodyweight','Bodyweight'],['athlete_selected','Choose load']]){
     const e={...base(),loadMode:mode,load:null};assert.equal(errors(e).length,0);assert.equal(loadText(e),expected);
-    assert.ok(errors({...e,load:25}).length);
+    if(mode==='bodyweight'){assert.equal(errors({...e,load:25}).length,0);assert.equal(loadText({...e,load:25}),'Bodyweight + 25 lb');}
+    else assert.ok(errors({...e,load:25}).length);
   }
   assert.equal(errors({...base(),load:null}).length,0);
 });
