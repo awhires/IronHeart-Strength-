@@ -3,6 +3,7 @@ import {propagateProgram} from '../shared/program-sync.mjs';
 import {prepareStrengthGoal,prepareStrengthPR} from '../shared/strength-progress.mjs';
 import {discoverable,confirmSchedule,proposeSchedule,moveWorkout,validDate,weekdayDate,scheduleRows} from '../shared/program-schedule.mjs';
 import {repeatProgramInstance,completedProgram,benchmarkDefinitions,analyzeTrainingQuestion} from '../shared/phase3.mjs';
+import {prepareBenchmark,benchmarkAttemptSignature} from '../shared/benchmark-attempts.mjs';
 import {workoutReceipts} from './workout-receipts.mjs';
 import {recordBlockScores,referencesExercise} from '../shared/workout-blocks.mjs';
 import {createScanService} from './ai/scan.mjs';
@@ -21,6 +22,7 @@ import {createGenerationJobs} from './ai/generation-jobs.mjs';
 import {GenerationError} from './ai/openai.mjs';
 import {createTrainingAnswerService} from './ai/training-answers.mjs';
 import {FIELDS} from '../shared/tracking.mjs';
+import {refreshAssignmentRunningPaces} from '../shared/automatic-running-pace.mjs';
 const draftSaves=createDraftSaveService(randomUUID);
 const checked=fn=>{try{return fn();}catch(e){throw Object.assign(e,{status:400});}};
 
@@ -45,10 +47,19 @@ const publicUser = u => ({id:u.id,email:u.email,name:u.name,role:u.role,sport:u.
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
 const str=(x,min=1,max=200)=>typeof x==='string' && x.trim().length>=min && x.length<=max;
 const num=(x,min,max)=>Number.isFinite(x) && x>=min && x<=max;
-function assign(program,athleteId,startDate) {
-  return {id:randomUUID(),athleteId,programId:program.id,name:program.name,startDate,weeks:program.weeks,goal:program.goal,coachNotes:program.coachNotes,progressionInstructions:program.progressionInstructions,aiProvenance:program.aiProvenance,progressionOptions:program.progressionOptions,repeatable:program.repeatable!==false,benchmarkType:program.benchmarkType||'none',
+function assign(program,athleteId,startDate,resolvePaces=true) {
+  const assignment={id:randomUUID(),athleteId,programId:program.id,name:program.name,startDate,weeks:program.weeks,goal:program.goal,coachNotes:program.coachNotes,progressionInstructions:program.progressionInstructions,aiProvenance:program.aiProvenance,progressionOptions:program.progressionOptions,repeatable:program.repeatable!==false,benchmarkType:program.benchmarkType||'none',
     description:program.description,modality:program.modality,level:program.level,plan:program.plan?structuredClone(program.plan):Array.from({length:program.weeks},(_,i)=>({week:i+1,sessions:program.sessions.map(s=>({...s,exercises:s.exercises.map(e=>periodize(e,i+1,program.weeks))}))}))};
+  return resolvePaces?refreshAssignmentRunningPaces(assignment,{logs:all('log'),definitions:all('benchmark'),library:all('exercise')},all('log')).assignment:assignment;
 }
+function refreshRunningForAthlete(athleteId){
+ const logs=all('log'),context={logs,definitions:all('benchmark'),library:all('exercise')};
+ for(const assignment of all('assignment').filter(a=>a.athleteId===athleteId)){
+  const refreshed=refreshAssignmentRunningPaces(assignment,context,logs);
+  if(refreshed.changed)put('assignment',refreshed.assignment,athleteId);
+ }
+}
+function saveLogAndRefresh(log,athleteId){const saved=put('log',log,athleteId);refreshRunningForAthlete(athleteId);return saved;}
 if(demo&&!db.prepare("SELECT value FROM metadata WHERE key='demo-assigned'").get()){
   const date=new Date();date.setDate(date.getDate()-((date.getDay()+6)%7));
   const dateOnly=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -97,7 +108,8 @@ const server=http.createServer(async(req,res)=>{
       const owned=id=>{const a=get('assignment',id);if(!a)fail(404,'Program not found.');if(u.role!=='coach'&&a.athleteId!==u.id)fail(403,'This program belongs to another athlete.');return a;};
       if(route==='/api/me')result=publicUser(u);
       else if(route==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(tokenHash(token));res.setHeader('Set-Cookie','ihs_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');result={ok:true};}
-      else if(route==='/api/data'&&req.method==='GET'){const assignments=all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),programs=all('program'),discover=u.role==='athlete'?programs.filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[];result={user:publicUser(u),demo,exercises:all('exercise'),programs:u.role==='coach'?programs:[],discover,athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments,strengthGoals:all('strengthGoal').filter(g=>u.role==='coach'||g.athleteId===u.id),strengthPRs:all('strengthPR').filter(p=>u.role==='coach'||p.athleteId===u.id),logs:all('log').filter(l=>u.role==='coach'||l.athleteId===u.id),benchmarks:benchmarkDefinitions(u.role==='coach'?programs:[],assignments)};}
+      else if(route==='/api/data'&&req.method==='GET'){const assignments=all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),programs=all('program'),discover=u.role==='athlete'?programs.filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[],savedBenchmarks=all('benchmark').filter(x=>u.role==='coach'?x.coachId===u.id:assignments.some(a=>a.programId===x.programId));result={user:publicUser(u),demo,exercises:all('exercise'),programs:u.role==='coach'?programs:[],discover,athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments,strengthGoals:all('strengthGoal').filter(g=>u.role==='coach'||g.athleteId===u.id),strengthPRs:all('strengthPR').filter(p=>u.role==='coach'||p.athleteId===u.id),logs:all('log').filter(l=>u.role==='coach'||l.athleteId===u.id),benchmarks:benchmarkDefinitions(u.role==='coach'?programs:[],assignments),savedBenchmarks};}
+      else if(route==='/api/benchmarks'&&req.method==='POST'){coach();const program=get('program',b.programId);if(!program)fail(404,'Program not found.');const definition=checked(()=>prepareBenchmark(b,program,all('exercise'),{id:randomUUID(),coachId:u.id,createdAt:new Date().toISOString()}));result=put('benchmark',definition,u.id);}
       else if(route==='/api/ask-ai'&&req.method==='POST'){
         const athleteId=u.role==='coach'?b.athleteId:u.id;
         if(typeof athleteId!=='string'||!db.prepare("SELECT id FROM users WHERE id=? AND role='athlete'").get(athleteId))fail(400,'Choose an athlete to ask about.');
@@ -116,7 +128,7 @@ const server=http.createServer(async(req,res)=>{
         if(u.role!=='athlete')fail(403,'Athlete access required.');let a;if(b.assignmentId)a=owned(b.assignmentId);else{const p=get('program',b.programId);if(!p||!discoverable(p,u.id))fail(404,'Program unavailable.');const existing=all('assignment').find(x=>x.athleteId===u.id&&x.programId===p.id);if(existing)fail(409,'This program is already in My Programs. Open that assignment.');a={...assign(p,u.id,b.startDate),enrollment:{source:'discover',status:'pending'}};}result=put('assignment',checked(()=>confirmSchedule(a,b,all('log'))),u.id);
       }
       else if(route==='/api/move-workout'&&req.method==='POST'){const a=owned(b.id);result=put('assignment',checked(()=>moveWorkout(a,b,all('log'))),a.athleteId);}
-      else if(route==='/api/programs'&&req.method==='POST'){coach();const library=all('exercise'),prepared=checked(()=>prepareProgram(b,library)),id=b.id||randomUUID(),previous=b.id?get('program',b.id):null;if(b.id&&!previous)fail(404,'Template not found.');const linked=previous?all('assignment').filter(a=>a.programId===id):[],logs=linked.length?all('log'):[],sync={assignments:linked.length,updated:0,completed:0,personalized:0,progression:0,conflicts:[]};db.exec('BEGIN');try{const saved=put('program',{...prepared,id});for(const a of linked){const oldPlan=assign(previous,a.athleteId,a.startDate).plan,newPlan=assign(saved,a.athleteId,a.startDate).plan;const changed=propagateProgram(a,oldPlan,newPlan,logs,previous.progressionOptions,saved.progressionOptions,previous,saved);const next={...changed.assignment,repeatable:saved.repeatable!==false,benchmarkType:saved.benchmarkType||'none'};if(JSON.stringify(next)!==JSON.stringify(a))put('assignment',next,a.athleteId);sync.updated+=changed.summary.updated;sync.completed+=changed.summary.completed;sync.personalized+=changed.summary.personalized;sync.progression+=changed.summary.progression;sync.conflicts.push(...changed.summary.conflictDetails.map(item=>({athleteId:a.athleteId,assignmentId:a.id,...item})));}db.exec('COMMIT');result={...saved,sync};}catch(error){db.exec('ROLLBACK');throw error;}}
+      else if(route==='/api/programs'&&req.method==='POST'){coach();const library=all('exercise'),prepared=checked(()=>prepareProgram(b,library)),id=b.id||randomUUID(),previous=b.id?get('program',b.id):null;if(b.id&&!previous)fail(404,'Template not found.');const linked=previous?all('assignment').filter(a=>a.programId===id):[],logs=linked.length?all('log'):[],sync={assignments:linked.length,updated:0,completed:0,personalized:0,progression:0,conflicts:[]};db.exec('BEGIN');try{const saved=put('program',{...prepared,id});for(const a of linked){const oldPlan=assign(previous,a.athleteId,a.startDate,false).plan,newPlan=assign(saved,a.athleteId,a.startDate,false).plan;const changed=propagateProgram(a,oldPlan,newPlan,logs,previous.progressionOptions,saved.progressionOptions,previous,saved);const next=refreshAssignmentRunningPaces({...changed.assignment,repeatable:saved.repeatable!==false,benchmarkType:saved.benchmarkType||'none'},{logs,definitions:all('benchmark'),library:all('exercise')},logs).assignment;if(JSON.stringify(next)!==JSON.stringify(a))put('assignment',next,a.athleteId);sync.updated+=changed.summary.updated;sync.completed+=changed.summary.completed;sync.personalized+=changed.summary.personalized;sync.progression+=changed.summary.progression;sync.conflicts.push(...changed.summary.conflictDetails.map(item=>({athleteId:a.athleteId,assignmentId:a.id,...item})));}db.exec('COMMIT');result={...saved,sync};}catch(error){db.exec('ROLLBACK');throw error;}}
       else if(route==='/api/ai/workout-scan'&&req.method==='POST'){limit(req);result=await scanner.scan(b,{userId:u.id,library:all('exercise')});}
       else if(route==='/api/ai/status'&&req.method==='GET'){coach();result=generation.status();}
       else if(route==='/api/ai/program-draft'&&req.method==='POST'){
@@ -148,7 +160,7 @@ const server=http.createServer(async(req,res)=>{
         if(b.kind==='log'||b.kind==='strengthPR'){if(u.role!=='coach'&&record.athleteId!==u.id)fail(403,'Access denied.');if(b.kind==='strengthPR'&&u.role!=='athlete')fail(403,'Only the athlete can change their manual PR.');}
         else coach();
         if(b.kind==='exercise'&&[...all('program'),...all('assignment'),...all('log'),...all('strengthGoal')].map(r=>r.exerciseId?{exercises:[r]}:r).some(r=>referencesExercise(r,b.id)))fail(409,'This exercise is in use. Remove it from programs and assignments first; exercises in workout history must be kept.');
-        db.prepare('DELETE FROM records WHERE kind=? AND id=?').run(b.kind,b.id);result={ok:true};
+        db.prepare('DELETE FROM records WHERE kind=? AND id=?').run(b.kind,b.id);if(b.kind==='log')refreshRunningForAthlete(record.athleteId);result={ok:true};
         }
       }
       else if(route==='/api/session-status'&&req.method==='POST'){coach();const a=owned(b.id);const s=a.plan.find(w=>w.week===b.week)?.sessions[b.session];if(!s||typeof b.cancelled!=='boolean')fail(400,'Invalid session.');s.cancelled=b.cancelled;result=put('assignment',a,a.athleteId);}
@@ -166,10 +178,29 @@ const server=http.createServer(async(req,res)=>{
         const dates=new Set(scheduleRows(next).map(r=>r.date));for(const other of otherAssignments.filter(a=>a.enrollment?.status!=='pending'&&!completedProgram(a,logs)))for(const row of scheduleRows(other))if(dates.has(row.date))fail(409,`Repeating this program conflicts with ${other.name} on ${row.date}. Choose another start date.`);
         result=put('assignment',next,u.id);
       }
-      else if(route==='/api/assignment'&&req.method==='PUT'){coach();const a=owned(b.id);const week=a.plan.find(w=>w.week===b.week);if(!week||!week.sessions[b.session])fail(400,'Session not found.');Object.assign(week.sessions[b.session],checked(()=>prepareSession({...week.sessions[b.session],exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},all('exercise'))));week.sessions[b.session].prescriptionRevision=(week.sessions[b.session].prescriptionRevision||0)+1;result=put('assignment',a,a.athleteId);}
+      else if(route==='/api/assignment'&&req.method==='PUT'){coach();const a=owned(b.id);const week=a.plan.find(w=>w.week===b.week);if(!week||!week.sessions[b.session])fail(400,'Session not found.');Object.assign(week.sessions[b.session],checked(()=>prepareSession({...week.sessions[b.session],exercises:b.exercises,...(b.blocks!==undefined?{blocks:b.blocks}:{})},all('exercise'))));week.sessions[b.session].prescriptionRevision=(week.sessions[b.session].prescriptionRevision||0)+1;const logs=all('log');result=put('assignment',refreshAssignmentRunningPaces(a,{logs,definitions:all('benchmark'),library:all('exercise')},logs).assignment,a.athleteId);}
       else if(route==='/api/tracker'&&req.method==='POST'){
         if(u.role!=='athlete')fail(403,'Sign in as an athlete to journal a workout.');
-        const receipt=workoutReceipt(u.id,route,b);if(receipt.result)result=receipt.result;else{let repeatOfLogId;if(b.repeatOfLogId!==undefined){const original=get('log',b.repeatOfLogId);if(!original||original.athleteId!==u.id)fail(404,'Original workout was not found.');repeatOfLogId=original.id;}const {repeatOfLogId:_ignored,...payload}=receipt.payload;const workout=checked(()=>prepareTrackerWorkout(payload,all('exercise')));result=receipt.commit(()=>put('log',{...workout,id:randomUUID(),athleteId:u.id,createdAt:new Date().toISOString(),...(repeatOfLogId?{repeatOfLogId}:{})},u.id));}
+        const receipt=workoutReceipt(u.id,route,b);
+        if(receipt.result)result=receipt.result;
+        else{
+          let repeatOfLogId;
+          if(b.repeatOfLogId!==undefined){const original=get('log',b.repeatOfLogId);if(!original||original.athleteId!==u.id)fail(404,'Original workout was not found.');repeatOfLogId=original.id;}
+          const benchmark=b.benchmarkId?get('benchmark',b.benchmarkId):null;
+          if(b.benchmarkId&&(!benchmark||!all('assignment').some(a=>a.athleteId===u.id&&a.programId===benchmark.programId)))fail(403,'Benchmark is not available to this athlete.');
+          const attemptId=b.repeatAttemptId||b.benchmarkAttemptId;
+          if(b.repeatAttemptId&&!repeatOfLogId||b.benchmarkId&&!attemptId||attemptId&&(typeof attemptId!=='string'||!/^[\w-]{16,100}$/.test(attemptId)))fail(400,'Invalid workout attempt ID.');
+          const attemptHash=attemptId?createHash('sha256').update(JSON.stringify(receipt.payload)).digest('hex'):null;
+          const duplicate=attemptId?all('log').find(l=>l.athleteId===u.id&&l.attemptId===attemptId):null;
+          if(duplicate){if(duplicate.repeatOfLogId!==repeatOfLogId||duplicate.benchmarkId!==benchmark?.id||duplicate.attemptHash!==attemptHash)fail(409,'This attempt ID belongs to a different workout.');result=duplicate;}
+          else{
+            if(b.assessmentMaximal!==undefined&&(typeof b.assessmentMaximal!=='boolean'||benchmark?.scoring?.protocol!=='six_minute_max_run'))fail(400,'Maximal effort confirmation requires a six-minute running assessment.');
+            const {repeatOfLogId:_source,repeatAttemptId:_repeat,benchmarkAttemptId:_benchmarkAttempt,benchmarkId:_benchmarkId,assessmentMaximal:_maximal,...payload}=receipt.payload;
+            const workout=checked(()=>prepareTrackerWorkout(payload,all('exercise')));
+            const signature=benchmark?benchmarkAttemptSignature(workout.exercises,workout.blocks,benchmark.scoring):null;
+            result=receipt.commit(()=>saveLogAndRefresh({...workout,id:randomUUID(),athleteId:u.id,createdAt:new Date().toISOString(),...(repeatOfLogId?{repeatOfLogId}:{}),...(benchmark?{benchmarkId:benchmark.id,benchmarkSignature:signature,...(benchmark.scoring.protocol==='six_minute_max_run'?{assessmentMaximal:b.assessmentMaximal===true}:{})}:{}),...(attemptId?{attemptId,attemptHash}:{})},u.id));
+          }
+        }
       }
       else if(route==='/api/log'&&req.method==='POST'){
         if(u.role!=='athlete')fail(403,'Sign in as an athlete to record a workout.');const receipt=workoutReceipt(u.id,route,b);if(receipt.result)result=receipt.result;else{const a=owned(b.assignmentId);if(a.enrollment?.status==='pending')fail(409,'Confirm your program schedule before logging.');const w=a.plan.find(w=>w.week===b.week);const s=w?.sessions[b.session];if(!s||s.cancelled)fail(400,'Session not found or removed from calendar.');const skippedWorkout=b.status==='skipped';if(!skippedWorkout&&(!num(b.readiness,1,5)||!Number.isInteger(b.readiness)||typeof b.pain!=='boolean'||!str(b.notes||'',0,2000)))fail(400,'Check workout feedback.');
@@ -182,7 +213,7 @@ const server=http.createServer(async(req,res)=>{
         const finalBlocks=skippedWorkout?(s.blocks||[]).filter(x=>x.type==='Metcon').map(x=>({blockId:x.id,skipped:true,skipReason:b.skipReason||''})):blockResults;
         const skippedCount=recorded.filter(e=>e.status==='skipped').length+finalBlocks.filter(e=>e.status==='skipped').length,totalCount=recorded.length+finalBlocks.length,partialCount=recorded.filter(e=>e.status==='partially_completed').length+finalBlocks.filter(e=>e.status==='partially_completed').length;
         const status=skippedWorkout||totalCount>0&&skippedCount===totalCount?'skipped':skippedCount||partialCount?'partially_completed':'completed';
-        result=receipt.commit(()=>put('log',{id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),prescriptionRevision:s.prescriptionRevision||0,status,...(skippedWorkout?{skipReason:b.skipReason||''}:{readiness:b.readiness,pain:b.pain,notes:b.notes||''}),exercises:recorded,...(sessionRecommendations(a,b.week,b.session,all('log'),all('exercise'),undefined,all('strengthPR')).some(rows=>rows.length)?{recommendations:sessionRecommendations(a,b.week,b.session,all('log'),all('exercise'),undefined,all('strengthPR')),recommendationsComputedAt:new Date().toISOString()}:{}),...(finalBlocks.length?{blockResults:finalBlocks,blocks:s.blocks}:{})},u.id));}
+        result=receipt.commit(()=>saveLogAndRefresh({id:randomUUID(),athleteId:u.id,assignmentId:a.id,week:b.week,session:b.session,sessionName:s.name,createdAt:new Date().toISOString(),prescriptionRevision:s.prescriptionRevision||0,status,...(skippedWorkout?{skipReason:b.skipReason||''}:{readiness:b.readiness,pain:b.pain,notes:b.notes||''}),exercises:recorded,...(sessionRecommendations(a,b.week,b.session,all('log'),all('exercise'),undefined,all('strengthPR')).some(rows=>rows.length)?{recommendations:sessionRecommendations(a,b.week,b.session,all('log'),all('exercise'),undefined,all('strengthPR')),recommendationsComputedAt:new Date().toISOString()}:{}),...(s.blocks?{blocks:structuredClone(s.blocks)}:{}),...(finalBlocks.length?{blockResults:finalBlocks}:{})},u.id));}
       }
       else if(route==='/api/log-edit'&&req.method==='POST'){
         if(u.role!=='athlete')fail(403,'Sign in as an athlete to edit workout results.');
@@ -193,7 +224,7 @@ const server=http.createServer(async(req,res)=>{
         if(existing.source==='tracker'){
           if(existing.assignmentId)fail(400,'Workout source is invalid.');
           const updated=checked(()=>prepareTrackerWorkout({sessionName:existing.sessionName,workoutDate:existing.workoutDate,notes:b.notes??existing.notes??'',exercises:b.exercises,blockResults:b.blockResults},all('exercise'),existing.workoutDate));
-          recorded=updated.exercises;blockResults=updated.blockResults||[];status=b.status==='skipped'?'skipped':b.status==='partially_completed'?'partially_completed':'completed';
+          if(JSON.stringify(updated.exercises.map(e=>e.target||null))!==JSON.stringify(existing.exercises.map(e=>e.target||null)))fail(409,'Saved prescriptions cannot be changed while correcting actual workout results.');if((updated.blockResults||[]).some(row=>{const original=(existing.blocks||[]).find(block=>block.id===row.blockId&&block.type==='Metcon')?.metcon||(existing.blockResults||[]).find(block=>block.blockId===row.blockId)?.metcon;return !original||JSON.stringify(row.metcon)!==JSON.stringify(original);}))fail(409,'Saved Metcon prescriptions cannot be changed while correcting results.');recorded=updated.exercises;blockResults=updated.blockResults||[];status=b.status==='skipped'?'skipped':updated.status;
         }else{
           const a=owned(existing.assignmentId);if(a.athleteId!==u.id)fail(403,'Access denied.');
           const targets=(existing.exercises||[]).map(e=>e.target);if(targets.some(t=>!t))fail(409,'This older workout does not have a complete prescription snapshot and cannot be safely edited.');
@@ -203,15 +234,16 @@ const server=http.createServer(async(req,res)=>{
           status=skipped||totalCount>0&&skippedCount===totalCount?'skipped':skippedCount||partialCount?'partially_completed':'completed';
         }
         const now=new Date().toISOString(),snapshot={exercises:existing.exercises,blockResults:existing.blockResults||[],status:existing.status||'completed',notes:existing.notes||'',readiness:existing.readiness,pain:existing.pain,updatedAt:existing.updatedAt||null};
-        const next={...existing,status,exercises:recorded,blockResults,...(existing.blocks?{blocks:existing.blocks}:{}),...(existing.source==='tracker'?{notes:b.notes??existing.notes??''}:{...(status==='skipped'?{skipReason:b.skipReason||''}:{readiness:b.readiness??existing.readiness,pain:b.pain??existing.pain,notes:b.notes??existing.notes??''})}),editHistory:[...(existing.editHistory||[]),{editedAt:now,editorId:u.id,previous:snapshot}].slice(-50),updatedAt:now};
-        result=put('log',next,u.id);
+        if(b.assessmentMaximal!==undefined&&(typeof b.assessmentMaximal!=='boolean'||!existing.assessmentProtocol&&!(existing.benchmarkId&&get('benchmark',existing.benchmarkId)?.scoring?.protocol==='six_minute_max_run')))fail(400,'Maximal effort confirmation requires a six-minute running assessment.');
+        const next={...existing,...(b.assessmentMaximal!==undefined?{assessmentMaximal:b.assessmentMaximal}:{}),status,exercises:recorded,blockResults,...(existing.blocks?{blocks:existing.blocks}:{}),...(existing.source==='tracker'?{notes:b.notes??existing.notes??''}:{...(status==='skipped'?{skipReason:b.skipReason||''}:{readiness:b.readiness??existing.readiness,pain:b.pain??existing.pain,notes:b.notes??existing.notes??''})}),editHistory:[...(existing.editHistory||[]),{editedAt:now,editorId:u.id,previous:snapshot}].slice(-50),updatedAt:now};
+        result=saveLogAndRefresh(next,u.id);
       }
       else if(route==='/api/recommendations'&&req.method==='GET'){coach();const a=owned(url.searchParams.get('id'));const week=a.plan.find(w=>w.week===Number(url.searchParams.get('week')));if(!week)fail(400,'Week not found.');result=week.sessions.flatMap((s,si)=>s.exercises.map((e,ei)=>{const history=all('log').filter(l=>l.athleteId===a.athleteId&&l.source!=='tracker').sort((x,y)=>x.createdAt.localeCompare(y.createdAt)).flatMap(l=>l.exercises.filter(x=>x.exerciseId===e.exerciseId).map(x=>({...x,pain:l.pain,readiness:l.readiness})));return {session:si,index:ei,exerciseId:e.exerciseId,current:e.load,...recommend(e,history)};}));}
       else if(route==='/api/account'&&req.method==='DELETE'){if(u.role!=='athlete')fail(400,'Coach account removal requires administrator maintenance.');db.prepare('DELETE FROM records WHERE owner=?').run(u.id);db.prepare('DELETE FROM users WHERE id=?').run(u.id);res.setHeader('Set-Cookie','ihs_session=; HttpOnly; Path=/; Max-Age=0');result={ok:true};}
       else fail(404,'Not found.');
     }
     res.end(JSON.stringify(route==='/api/data'?withAthleteRecommendations(normalizeData(result)):result));
-  }catch(error){if(res.destroyed)return;res.writeHead(error.status||500);res.end(JSON.stringify({error:error.status?error.message:'Something went wrong. Please try again.',...(error instanceof GenerationError?{code:error.code,...(error.diagnostics?{diagnostics:error.diagnostics}:{})}:{})}));if(!error.status)console.error(error);}
+  }catch(error){if(res.destroyed)return;res.writeHead(error.status||500);res.end(JSON.stringify({error:error.status?error.message:'Something went wrong. Please try again.',...(error.findings?{findings:error.findings}:{}),...(error instanceof GenerationError?{code:error.code,...(error.diagnostics?{diagnostics:error.diagnostics}:{})}:{})}));if(!error.status)console.error(error);}
 });
 // The explicit development mode overrides stale HOST/PORT values from local env files.
 // Production and ordinary local development retain their existing bind defaults.

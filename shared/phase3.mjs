@@ -3,6 +3,8 @@ import {cardioMetrics} from './cardio-stats.mjs';
 import {convertWeight} from './ai/contract.mjs';
 import {workoutDate} from './volume-stats.mjs';
 import {scoreText} from './workout-blocks.mjs';
+import {initialCardioActuals} from './cardio-logging.mjs';
+import {localDateString} from './workout-tracker.mjs';
 
 const dayKey=(value,timeZone='UTC')=>{
   if(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value))return value;
@@ -90,7 +92,32 @@ export function repeatProgramInstance(assignment,{id,startDate,startedAt=new Dat
 
 export function repeatWorkoutDraft(log,exercises){
   if(!log?.id||!Array.isArray(log.exercises))throw Error('Workout history is unavailable for repeating.');
-  return {repeatOfLogId:log.id,sessionName:log.sessionName,exercises:log.exercises.filter(e=>e.status!=='skipped').map(e=>({exerciseId:e.exerciseId,blockType:e.blockType|| (trackingProfile(exercises.find(x=>x.id===e.exerciseId))==='strength'?'Strength':'Cardio'),...(e.target?{target:structuredClone(e.target)}:{}),sets:(e.sets||[]).map(s=>({load:s.load??'',loadUnit:s.loadUnit||'lbs',reps:s.reps??'',rpe:s.rpe??'',durationSeconds:s.durationSeconds??'',distance:s.distance??'',distanceUnit:s.distanceUnit||'mi',paceSeconds:s.paceSeconds??'',completed:false})),complex:structuredClone(e.complex||[]),intervals:structuredClone(e.intervals||[]),notes:''})),blockResults:(log.blockResults||[]).filter(r=>r.status!=='skipped').map(r=>({metcon:structuredClone(r.metcon),score:{rx:r.score?.rx||'RX',loadUnit:r.score?.loadUnit||'lbs',notes:''}}))};
+  const entries=log.exercises.filter(e=>e.target||e.setBlocks?.length||e.sets?.length).map(e=>{
+    const profile=trackingProfile(exercises.find(x=>x.id===e.exerciseId));
+    const target=e.target?structuredClone(e.target):null;
+    const source=e.setBlocks?.length?e.setBlocks:(e.sets||[]).map(s=>({count:1,...s}));
+    const blank=source.flatMap(s=>Array.from({length:s.count||1},()=>({count:1,reps:'',load:'',loadUnit:s.loadUnit||'lbs',rpe:'',distanceUnit:s.distanceUnit||'mi',completed:false})));
+    const prescribed=target?.setBlocks?.length?target.setBlocks:target?.sets&&profile==='strength'?[target]:null;
+    const blocks=prescribed?prescribed.flatMap(b=>Array.from({length:b.sets??b.count??1},()=>({count:1,reps:b.reps??'',load:b.load??'',loadUnit:b.loadUnit||'lbs',rpe:b.rpe??'',completed:false}))):blank;
+    return {exerciseId:e.exerciseId,blockType:e.blockType||(profile==='strength'?'Strength':'Cardio'),...(target?{target}:{}),setBlocks:blocks,sets:profile==='strength'?blocks:target?initialCardioActuals(target):blank,complex:structuredClone(e.complex||[]),intervals:structuredClone(target?.intervals||e.intervals||[]),notes:''};
+  });
+  return {repeatOfLogId:log.id,repeatAttemptId:crypto.randomUUID(),...(log.benchmarkId?{benchmarkId:log.benchmarkId}:{}),sessionName:log.sessionName,workoutDate:localDateString(),exercises:entries,blocks:structuredClone(log.blocks||[]),blockResults:(log.blockResults||[]).map(r=>({blockId:r.blockId,metcon:structuredClone(r.metcon),score:{rx:'RX',loadUnit:r.score?.loadUnit||'lbs',notes:''}}))};
+}
+export function benchmarkWorkoutDraft(definition,exercises){
+  const draft=repeatWorkoutDraft({id:`benchmark:${definition.id}`,sessionName:definition.session.name,exercises:definition.session.exercises.map(target=>({exerciseId:target.exerciseId,target,sets:[]})),blocks:definition.session.blocks||[],blockResults:(definition.session.blocks||[]).filter(b=>b.type==='Metcon').map(b=>({blockId:b.id,metcon:b.metcon}))},exercises);
+  delete draft.repeatOfLogId;delete draft.repeatAttemptId;
+  return {...draft,benchmarkId:definition.id,benchmarkAttemptId:crypto.randomUUID(),...(definition.scoring.protocol==='six_minute_max_run'?{assessmentProtocol:'six_minute_max_run'}:{})};
+}
+
+export function repeatWorkoutProgramDraft(log){
+  if(!log?.id||!Array.isArray(log.exercises)||log.exercises.some(entry=>!entry.target))throw Error('This workout has no complete saved prescription. Repeat it as an athlete workout instead.');
+  const date=log.workoutDate||log.createdAt?.slice(0,10);
+  const day=date?new Date(`${date}T12:00:00Z`).getUTCDay():1;
+  const blocks=log.blocks?.length?structuredClone(log.blocks):[
+    ...(log.exercises.length?[{id:'repeat-exercises',type:'Strength',exerciseIndexes:log.exercises.map((_,i)=>i)}]:[]),
+    ...(log.blockResults||[]).map((row,i)=>({id:row.blockId||`repeat-metcon-${i}`,type:'Metcon',metcon:structuredClone(row.metcon)}))
+  ];
+  return {name:`${log.sessionName} (repeat)`,goal:'General performance',weeks:1,description:'New program draft based on a prior workout prescription. Review and assign it explicitly.',sessions:[{name:log.sessionName,day,exercises:log.exercises.map(entry=>structuredClone(entry.target)),...(blocks.length?{blocks}:{})}]};
 }
 
 export function benchmarkDefinitions(programs=[],assignments=[]){

@@ -52,7 +52,11 @@ export function loadText(item){
 export function prescriptionText(item){
   const e=movementPrescription(item)||normalizePrescription(item);
   if(e.trackingType&&e.trackingType!=='strength'){
-    if(CARDIO_TYPES.includes(e.trackingType))return cardioTargetText(e);
+    if(CARDIO_TYPES.includes(e.trackingType)){
+      const text=cardioTargetText(e),source=e.paceRecommendation;
+      if(e.paceMethod?.type==='assessment')return `${text} · ${source?.status==='recommended'?`Assessment pace from ${source.sourceDate} (${source.method})`:source?.reason||'Assessment pace unavailable for this athlete'}`;
+      return text;
+    }
     if(MOVEMENT_TYPES.includes(e.trackingType)){
       const count=e.sets??1,measure=e.metrics?.durationSeconds!=null?setSummary({durationSeconds:e.metrics.durationSeconds},e.trackingType):e.metrics?.distance!=null?setSummary(e.metrics,e.trackingType):`Duration not specified${e.reps!=null?' (legacy '+e.reps+' reps/breaths preserved)':''}`;
       const load=e.loadMode===L.PERCENTAGE?`${e.percent1RM}% of ${e.referenceExerciseName||'reference lift'} 1RM`:e.loadMode===L.FIXED&&e.metrics?.load!=null?`${e.metrics.load} ${unitLabel(e.metrics.loadUnit)}`:e.trackingType==='loadedTimed'?'Load athlete-selected':null;

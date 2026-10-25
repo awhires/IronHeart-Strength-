@@ -1,4 +1,4 @@
-import {convertDistance} from './tracking.mjs';
+import {convertDistance,trackingProfile} from './tracking.mjs';
 import {convertWeight} from './ai/contract.mjs';
 import {formatTime} from './time.mjs';
 export const BLOCK_TYPES=['Strength','Hypertrophy','Metcon','Cardio','Accessory','Mobility / Recovery'];
@@ -82,8 +82,12 @@ export function prepareBlocks(blocks,exercises,library){
    catch(error){if(error instanceof WorkoutBlockError){error.path=`/blocks/${i}/metcon${error.path}`;throw error;}invalid(error.message,`/blocks/${i}/metcon`,'valid Metcon prescription',b.metcon);}
   }
   if(!Array.isArray(b.exerciseIndexes)||!b.exerciseIndexes.length)invalid('Add exercises to each block.',`/blocks/${i}/exerciseIndexes`,'nonempty array of exercise indexes',b.exerciseIndexes);
+  if(b.superset!==undefined&&typeof b.superset!=='boolean')invalid('Choose whether this block is a superset.',`/blocks/${i}/superset`,'boolean',b.superset);
+  if(b.superset===true&&(b.exerciseIndexes.length<2||!['Strength','Hypertrophy','Accessory'].includes(b.type)||b.exerciseIndexes.some(n=>trackingProfile(library.find(x=>x.id===exercises[n]?.exerciseId))!=='strength')))invalid('A superset needs at least two strength exercises.',`/blocks/${i}/exerciseIndexes`,'two or more strength exercise indexes',b.exerciseIndexes);
+  if(b.supersetNotes!==undefined&&!text(b.supersetNotes,2000))invalid('Check superset coaching notes.',`/blocks/${i}/supersetNotes`,'text up to 2000 characters',b.supersetNotes);
+  if(b.restSeconds!==undefined&&b.restSeconds!==null&&(!Number.isInteger(b.restSeconds)||b.restSeconds<0||b.restSeconds>600))invalid('Check superset rest time.',`/blocks/${i}/restSeconds`,'0–600 whole seconds or null',b.restSeconds);
   for(const [j,n] of b.exerciseIndexes.entries()){if(!Number.isInteger(n)||n<0||n>=exercises.length||seen.has(n))invalid('Each exercise must belong to exactly one block.',`/blocks/${i}/exerciseIndexes/${j}`,`unique integer index from 0 to ${exercises.length-1}`,n);seen.add(n);}
-  return {id,type:b.type,name:b.name||'',exerciseIndexes:[...b.exerciseIndexes]};
+  return {id,type:b.type,name:b.name||'',exerciseIndexes:[...b.exerciseIndexes],...(b.superset?{superset:true}:{}),...(b.supersetNotes?{supersetNotes:b.supersetNotes}:{}),...(b.restSeconds!=null?{restSeconds:b.restSeconds}:{})};
  });
  if(seen.size!==exercises.length)invalid('Each exercise must belong to a block.','/blocks','every exercise index assigned exactly once',`${exercises.length-seen.size} unassigned`);return clean;
 }

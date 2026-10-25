@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {benchmarkWorkoutDraft,repeatWorkoutDraft} from '../shared/phase3.mjs';
+import {benchmarkHistory} from '../shared/benchmark-attempts.mjs';
+
+test('coach-owned benchmark snapshots and idempotent athlete attempts survive save/reload without changing history',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-repeat-benchmark-')),port='4249',child=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:port,HOST:'127.0.0.1',DEMO_MODE:'true',DB_PATH:join(dir,'test.sqlite'),AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
+ t.after(async()=>{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done;}await rm(dir,{recursive:true,force:true});});for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);
+ const req=async(path,method='GET',body,token)=>{const response=await fetch(`http://127.0.0.1:${port}/api/${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,data:await response.json()};};
+ const coach=(await req('demo','POST',{role:'coach',native:true})).data.token,athlete=(await req('demo','POST',{role:'athlete',native:true})).data.token;
+ const initial=(await req('data','GET',null,coach)).data,library=initial.exercises;
+ const session={name:'Bench and Row test',day:1,exercises:[{exerciseId:'bench',sets:5,reps:3,load:150,setBlocks:[{sets:2,reps:3,load:150},{sets:3,reps:3,load:160}]},{exerciseId:'barbell-row',sets:4,reps:10,load:90}],blocks:[{id:'superset',type:'Strength',superset:true,exerciseIndexes:[0,1]}]};
+ const row=library.find(e=>e.name==='Barbell Bent-Over Row')||library.find(e=>e.id==='barbell-row')||library.find(e=>e.name?.includes('Row')&&e.trackingType!=='erg');assert.ok(row);session.exercises[1].exerciseId=row.id;
+ const program=await req('programs','POST',{name:'Benchmark program',goal:'Build strength',weeks:1,description:'',sessions:[session]},coach);assert.equal(program.status,200,JSON.stringify(program.data));
+ const assignment=await req('assign','POST',{programId:program.data.id,athleteId:'jordan',startDate:'2030-02-04'},coach);assert.equal(assignment.status,200,JSON.stringify(assignment.data));
+ const saved=await req('benchmarks','POST',{programId:program.data.id,week:1,session:0,name:'3RM Bench',description:'One scored exercise, two separate blocks',scoring:{type:'strength_load',exerciseId:'bench',reps:3}},coach);assert.equal(saved.status,200,JSON.stringify(saved.data));
+ assert.equal((await req('benchmarks','POST',{programId:program.data.id,week:1,session:0,name:'Not authorized',scoring:{type:'strength_load',exerciseId:'bench',reps:3}},athlete)).status,403);
+ const athleteData=(await req('data','GET',null,athlete)).data;assert.ok(athleteData.savedBenchmarks.some(b=>b.id===saved.data.id));
+ const payload=(load,attemptId)=>{const draft=benchmarkWorkoutDraft(saved.data,library);return {sessionName:draft.sessionName,workoutDate:'2030-02-05',notes:'',benchmarkId:saved.data.id,benchmarkAttemptId:attemptId,blocks:draft.blocks,exercises:draft.exercises.map(e=>({exerciseId:e.exerciseId,target:e.target,blocks:e.setBlocks.map(b=>({...b,load:e.exerciseId==='bench'?load:b.load??90,rpe:null,completed:true}))}))};};
+ const attemptId=crypto.randomUUID(),first=payload(185,attemptId),attempt=await req('tracker','POST',{...first,clientRequestId:crypto.randomUUID()},athlete);assert.equal(attempt.status,200,JSON.stringify(attempt.data));assert.equal(attempt.data.blocks[0].superset,true);assert.equal(attempt.data.exercises[0].target.setBlocks.length,2);
+ const duplicate=await req('tracker','POST',{...first,clientRequestId:crypto.randomUUID()},athlete);assert.equal(duplicate.status,200);assert.equal(duplicate.data.id,attempt.data.id);
+ const conflict=await req('tracker','POST',{...payload(200,attemptId),clientRequestId:crypto.randomUUID()},athlete);assert.equal(conflict.status,409);
+ const second=await req('tracker','POST',{...payload(195,crypto.randomUUID()),workoutDate:'2030-02-12',clientRequestId:crypto.randomUUID()},athlete);assert.equal(second.status,200,JSON.stringify(second.data));assert.notEqual(second.data.id,attempt.data.id);
+ const current=(await req('data','GET',null,athlete)).data,history=benchmarkHistory(saved.data,current.logs);assert.equal(history.attempts.length,2);assert.equal(history.best.score.value,195);assert.equal(history.change.absolute,10);assert.equal(current.logs.find(l=>l.id===attempt.data.id).exercises[0].sets[0].load,185);assert.equal(current.assignments.find(a=>a.id===assignment.data.id).plan[0].sessions[0].exercises[0].setBlocks[0].load,150);
+ const repeated=repeatWorkoutDraft(second.data,library),third=await req('tracker','POST',{sessionName:repeated.sessionName,workoutDate:'2030-02-19',notes:'Third separate attempt',repeatOfLogId:repeated.repeatOfLogId,repeatAttemptId:repeated.repeatAttemptId,benchmarkId:repeated.benchmarkId,blocks:repeated.blocks,exercises:repeated.exercises.map(e=>({exerciseId:e.exerciseId,target:e.target,blocks:e.setBlocks.map(b=>({...b,load:e.exerciseId==='bench'?205:b.load??90,rpe:null,completed:true}))})),clientRequestId:crypto.randomUUID()},athlete);assert.equal(third.status,200,JSON.stringify(third.data));assert.equal(third.data.repeatOfLogId,second.data.id);assert.notEqual(third.data.id,second.data.id);assert.equal(benchmarkHistory(saved.data,(await req('data','GET',null,athlete)).data.logs).attempts.length,3);
+ const corrected=await req('log-edit','POST',{id:third.data.id,expectedUpdatedAt:third.data.updatedAt||third.data.createdAt,notes:'Corrected actual loads',exercises:third.data.exercises.map(e=>({exerciseId:e.exerciseId,target:e.target,sets:e.sets.map(s=>({...s,load:e.exerciseId==='bench'?170:s.load}))})),blockResults:third.data.blockResults||[]},athlete);
+ assert.equal(corrected.status,200,JSON.stringify(corrected.data));assert.equal(corrected.data.id,third.data.id);assert.equal(corrected.data.workoutDate,'2030-02-19');assert.equal(corrected.data.editHistory.length,1);
+ const afterEdit=benchmarkHistory(saved.data,(await req('data','GET',null,athlete)).data.logs);assert.equal(afterEdit.best.logId,second.data.id);assert.equal(afterEdit.attempts.length,3);assert.equal(afterEdit.attempts[0].score.value,185);
+ const changedTarget=await req('log-edit','POST',{id:corrected.data.id,expectedUpdatedAt:corrected.data.updatedAt,exercises:corrected.data.exercises.map(e=>({exerciseId:e.exerciseId,target:{...e.target,reps:1},sets:e.sets})),blockResults:[]},athlete);assert.equal(changedTarget.status,409,'correcting actual results must not rewrite the benchmark prescription');
+});

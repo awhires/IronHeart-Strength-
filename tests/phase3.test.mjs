@@ -14,7 +14,7 @@ test('program attempts require a finished attempt and preserve the source while 
 });
 
 test('repeating a workout keeps its prescriptions and original link while creating a fresh editable attempt',()=>{
- const draft=repeatWorkoutDraft(logs[0],library);assert.equal(draft.repeatOfLogId,'log1');assert.equal(draft.sessionName,'Bench');assert.equal(draft.exercises[0].target.sets,2);assert.equal(draft.exercises[0].sets[0].load,160);assert.equal(draft.blockResults.length,0);assert.notEqual(draft.workoutDate,logs[0].workoutDate);assert.equal(repeatWorkoutDraft(logs[1],library).exercises.length,0);
+ const draft=repeatWorkoutDraft(logs[0],library);assert.equal(draft.repeatOfLogId,'log1');assert.equal(draft.sessionName,'Bench');assert.equal(draft.exercises[0].target.sets,2);assert.equal(draft.exercises[0].sets[0].load,150,'repeat starts from the original prescription, not recorded actuals');assert.equal(draft.blockResults.length,0);assert.notEqual(draft.workoutDate,logs[0].workoutDate);assert.equal(repeatWorkoutDraft(logs[1],library).exercises.length,0,'legacy skipped results without a prescription cannot invent one');
 });
 
 test('benchmark catalog uses only coach-designated programs and MetCons',()=>{

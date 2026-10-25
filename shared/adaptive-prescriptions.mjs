@@ -84,8 +84,8 @@ export function sessionRecommendations(assignment,week,session,logs,library,toda
  const date=scheduledDate(assignment,week,session);
  return target.exercises.map((e,ei)=>{
  const rule=resolvedCoachRule(e,assignment,session,ei);
- const modes=e.loadMode===LOAD_MODE.PREVIOUS_PERFORMANCE;
- return rule||modes||e.referenceLoad||e.loadMode===LOAD_MODE.PERCENTAGE?(prescribedSets(e).length?prescribedSets(e):[e]).map(t=>recommendAthleteLoad({...t,...(rule?{adaptiveProgression:rule}:{})},{athleteId:assignment.athleteId,assignmentId:assignment.id,week,session,date,logs,library,manualPRs,today})):[];
+ const targets=prescribedSets(e).length?prescribedSets(e):[e];
+ return rule||targets.some(t=>t.loadMode===LOAD_MODE.PREVIOUS_PERFORMANCE||t.referenceLoad||t.loadMode===LOAD_MODE.PERCENTAGE)?targets.map(t=>recommendAthleteLoad({...t,...(rule?{adaptiveProgression:rule}:{})},{athleteId:assignment.athleteId,assignmentId:assignment.id,week,session,date,logs,library,manualPRs,today})):[];
  });
 }
 // Existing explicit coach rules remain authoritative; never infer a rule from prose.

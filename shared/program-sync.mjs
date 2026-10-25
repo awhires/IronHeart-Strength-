@@ -3,8 +3,9 @@
 // three-way merge against the previous master snapshot.
 import {resolvedCoachRule} from './adaptive-prescriptions.mjs';
 import {extendProgramSchedule} from './program-schedule.mjs';
+import {withoutAutomaticPace} from './automatic-running-pace.mjs';
 
-const comparable=session=>JSON.stringify({...session,day:undefined,cancelled:undefined,prescriptionRevision:undefined});
+const comparable=session=>JSON.stringify({...session,exercises:session.exercises?.map(withoutAutomaticPace),day:undefined,cancelled:undefined,prescriptionRevision:undefined});
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const completed=(logs,id,week,index)=>logs.some(l=>l.assignmentId===id&&l.week===week&&l.session===index);
 const progressionChanged=(session,assignment,index,oldOptions,newOptions)=>session.exercises.some((exercise,exerciseIndex)=>JSON.stringify(resolvedCoachRule(exercise,{...assignment,progressionOptions:oldOptions},index,exerciseIndex))!==JSON.stringify(resolvedCoachRule(exercise,{...assignment,progressionOptions:newOptions},index,exerciseIndex)));
@@ -14,7 +15,7 @@ const progressionChanged=(session,assignment,index,oldOptions,newOptions)=>sessi
 function exerciseEntries(rows=[]){const counts=new Map();return rows.map((value,index)=>{const id=value.exerciseId||`legacy:${index}`,occurrence=counts.get(id)||0;counts.set(id,occurrence+1);return {key:`${id}#${occurrence}`,value,index};});}
 function mergeRecord(current,old,replacement,fieldPrefix,conflicts){const merged={...structuredClone(current)};for(const key of new Set([...Object.keys(old||{}),...Object.keys(current||{}),...Object.keys(replacement||{})])){const was=old?.[key],mine=current?.[key],coach=replacement?.[key];if(same(mine,was)){if(Object.hasOwn(replacement||{},key))merged[key]=structuredClone(coach);else delete merged[key];}else if(!same(coach,was)&&!same(mine,coach))conflicts.push(`${fieldPrefix}.${key}`);}return merged;}
 function mergeSession(current,old,replacement,summary,weekNumber){
- const before=exerciseEntries(old.exercises),now=exerciseEntries(current.exercises),after=exerciseEntries(replacement.exercises);
+ const before=exerciseEntries(old.exercises.map(withoutAutomaticPace)),now=exerciseEntries(current.exercises.map(withoutAutomaticPace)),after=exerciseEntries(replacement.exercises.map(withoutAutomaticPace));
  const oldBy=new Map(before.map(x=>[x.key,x])),currentBy=new Map(now.map(x=>[x.key,x])),newBy=new Map(after.map(x=>[x.key,x]));
  const entries=[],conflicts=[];
  for(const key of new Set([...before.map(x=>x.key),...now.map(x=>x.key),...after.map(x=>x.key)])){

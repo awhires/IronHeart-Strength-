@@ -20,17 +20,17 @@ export function prepareJournalEntry(entry,exercise,library){
  if(complexReps>100)throw Error('Use at most 100 repetitions per complex.');
  const sets=raw.map(s=>{
   const out={};
-  if(strength){out.reps=parts.length?complexReps:s.reps;if(!Number.isInteger(out.reps)||out.reps<0||out.reps>100)throw Error('Check each set: reps 0–100.');}
+  if(strength){out.reps=parts.length?complexReps:s.reps;if(!(s.completed===false&&out.reps==null)&&(!Number.isInteger(out.reps)||out.reps<0||out.reps>100))throw Error('Check each set: reps 0–100.');}
   if(FIELDS[trackingType].includes('load')){out.load=s.load??null;out.loadUnit=s.loadUnit??'lbs';if(!['lbs','kg'].includes(out.loadUnit)||!optional(out.load,0,1200)||(out.load!==null&&inPounds(out.load,out.loadUnit)>1200))throw Error('Check each set: load up to 1200 lb equivalent.');}
   if(strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10)||!optional(s.rir,0,10))throw Error('Check RPE 1–10 and RIR 0–10.');if(s.rir!=null)out.rir=s.rir;}
   for(const [key,max] of [['durationSeconds',86400],['distance',1000000],['speedMph',60],['incline',100],['level',100],['paceSeconds',86400],['watts',10000],['cadence',500],['calories',100000],['steps',1000000],['floors',10000]]){
    if(FIELDS[trackingType].includes(key)&&s[key]!=null){if(!optional(s[key],0,max))throw Error(`Check ${key}.`);out[key]=s[key];}
   }
   if(out.distance!=null||FIELDS[trackingType].includes('paceSeconds')){out.distanceUnit=s.distanceUnit??(['carry','erg','swimming'].includes(trackingType)?'m':'mi');if(!DISTANCE_METERS[out.distanceUnit])throw Error('Choose a valid distance unit.');}
-  if(['timed','loadedTimed'].includes(trackingType)&&!(out.durationSeconds>0))throw Error('Enter a positive duration in seconds.');
-  if(trackingType==='loadedTimed'&&out.load==null)throw Error('Enter the hold load.');
-  if(trackingType==='carry'&&(!(out.distance>0)||out.load==null))throw Error('Enter carry load and distance.');
-  if(CARDIO_TYPES.includes(trackingType)&&!(out.durationSeconds>0)&&!(out.distance>0))throw Error('Enter cardio duration or distance.');
+  if(s.completed!==false&&['timed','loadedTimed'].includes(trackingType)&&!(out.durationSeconds>0))throw Error('Enter a positive duration in seconds.');
+  if(s.completed!==false&&trackingType==='loadedTimed'&&out.load==null)throw Error('Enter the hold load.');
+  if(s.completed!==false&&trackingType==='carry'&&(!(out.distance>0)||out.load==null))throw Error('Enter carry load and distance.');
+  if(s.completed!==false&&CARDIO_TYPES.includes(trackingType)&&!(out.durationSeconds>0)&&!(out.distance>0))throw Error('Enter cardio duration or distance.');
   if(s.paceUnit!=null){if(trackingType!=='running'||!['mi','km'].includes(s.paceUnit))throw Error('Running pace uses mi or km.');out.paceUnit=s.paceUnit;}
   if(!strength){out.rpe=s.rpe??null;if(!optional(out.rpe,1,10))throw Error('Check optional cardio RPE 1–10.');if(CARDIO_TYPES.includes(trackingType)){const computed=calculatedCardioMetrics(out,trackingType);if(computed.paceUnit&&(s.paceUnit!=null||out.paceSeconds==null))out.paceUnit=computed.paceUnit;for(const k of ["paceSeconds","speedMph"])if(out[k]==null&&computed[k]!=null)out[k]=+computed[k].toFixed(6);}}
 
@@ -59,5 +59,5 @@ export function prepareJournalEntry(entry,exercise,library){
  return {exerciseId:exercise.id,exerciseName:exercise.name,sets,
   ...(strength?{}:{trackingType}),...(entry.blocks?{setBlocks:entry.blocks.map((b,i)=>({count:b.count,...sets.find(s=>s.blockIndex===i)}))}:{}),
   ...(parts.length?{complex:parts,complexText:complexLabel(parts,library),volumeEligible:parts.every(p=>p.exerciseId===exercise.id)}:{}),
-  ...(entry.target?{target:validateCardioPrescription(entry.target,library)}:{}),...(cleanIntervals.length?{intervals:cleanIntervals}:{}),...(entry.notes?{notes:entry.notes}:{})};
+  ...(entry.target&&!strength?{target:validateCardioPrescription(entry.target,library)}:{}),...(cleanIntervals.length?{intervals:cleanIntervals}:{}),...(entry.notes?{notes:entry.notes}:{})};
 }

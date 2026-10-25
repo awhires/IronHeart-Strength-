@@ -4,7 +4,9 @@ export function prescribedCardioIntervals(target){
  const blocks=target.intervals?.length?target.intervals:[{rounds:target.intervalCount||1,work:target.metrics||{},recovery:{durationSeconds:target.restSeconds??target.rest??0}}];
  validateIntervalShape(blocks);
  return blocks.flatMap((b,blockIndex)=>Array.from({length:b.rounds??1},(_,roundIndex)=>intervalSegments(b).map((segment,segmentIndex)=>{
-  const work=structuredClone(segment.metrics),recovery=structuredClone(b.segments?(segmentIndex===b.segments.length-1&&roundIndex<b.rounds-1?b.recovery||{}:{}):b.recovery||{});
+  const finalRound=roundIndex===(b.rounds??1)-1;
+  const hasRecovery=b.segments?(segmentIndex===b.segments.length-1&&(!finalRound||b.recoveryAfterFinal===true)):(!finalRound||b.recoveryAfterFinal!==false);
+  const work=structuredClone(segment.metrics),recovery=structuredClone(hasRecovery?b.recovery||{}:{});
   if(target.trackingType==='running')work.paceUnit=work.paceUnit||(['mi','km'].includes(work.distanceUnit)?work.distanceUnit:'km');
   if(!(work.durationSeconds>0)&&work.distance>0&&work.paceSeconds>0){
    const base=target.trackingType==='erg'?500:target.trackingType==='swimming'?(work.distanceUnit==='yd'?91.44:100):convertDistance(1,work.paceUnit||work.distanceUnit||'mi','m');
