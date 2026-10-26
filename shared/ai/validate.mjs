@@ -4,7 +4,7 @@ import {prepareBlocks} from '../workout-blocks.mjs';
 import {trackingProfile,CARDIO_TYPES} from '../tracking.mjs';
 import {MOVEMENT_TYPES} from '../movement-prescriptions.mjs';
 import {AI_DRAFT_SCHEMA, LOAD_MODE, LOAD_UNIT, EFFORT_MODE, SEVERITY, TEMPO_REGEX, inPounds} from './contract.mjs';
-import {validMaximum, calculatePercentageLoad} from '../prescriptions.mjs';
+import {validMaximum, calculatePercentageLoad, validatePrescription} from '../prescriptions.mjs';
 const record = x => x!==null&&typeof x==='object'&&!Array.isArray(x);
 const number = x => typeof x==='number'&&Number.isFinite(x);
 const validDate = x => typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x))&&new Date(x).toISOString().slice(0,10)===x;
@@ -69,7 +69,7 @@ export function estimateSessionMinutes(session){
 export function validateDraftStructure(draft){
   const findings=[];shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',(code,path,message)=>findings.push({code,path,message,severity:SEVERITY.ERROR}));return findings;
 }
-export function validateDraft(draft,library=[],requirements={}){
+export function normalizeDraftForValidation(draft){
   // Optional coach targets may be omitted by a provider; normalize only an
   // in-memory validation copy so blanks stay null and never become zero.
   draft=structuredClone(draft);
@@ -78,6 +78,10 @@ export function validateDraft(draft,library=[],requirements={}){
     for(const key of ['sets','reps','load','loadDelta','percent1RM','reference1RM','referenceLoad','rpe','rir','rest','tempo'])if(!Object.hasOwn(e,key))e[key]=null;
     e.repMode??='fixed';e.loadMode??=LOAD_MODE.ATHLETE_SELECTED;e.loadUnit??=LOAD_UNIT.LBS;e.effortMode??=EFFORT_MODE.NONE;e.increment??=5;e.notes??='';e.progressionInstructions??='';
   }
+  return draft;
+}
+export function validateDraft(draft,library=[],requirements={}){
+  draft=normalizeDraftForValidation(draft);
   const findings=[];
   const add=(code,path,message,severity=SEVERITY.ERROR,suggestedResolution)=>findings.push({code,severity,message,path,...(suggestedResolution?{suggestedResolution}:{})});
   shape(draft,draft?.schemaVersion===2?AI_DRAFT_SCHEMA_V2:AI_DRAFT_SCHEMA,'',add);
@@ -114,6 +118,11 @@ export function validateDraft(draft,library=[],requirements={}){
             if(!known)add('UNKNOWN_EXERCISE',`${ep}/exerciseId`,`“${e.exerciseName}” needs a library match (Week ${w.week}, ${s.name}).`,SEVERITY.ERROR,'Select an existing library exercise.');
             else if(e.exerciseName!==known.name)add('EXERCISE_NAME_MISMATCH',`${ep}/exerciseName`,'Exercise name differs from its library ID.',SEVERITY.WARNING,'Confirm the selected library exercise.');
             if(known&&requirements.unavailableEquipment?.some(x=>x.toLowerCase().trim()===known.equipment?.toLowerCase().trim()))add('UNAVAILABLE_EQUIPMENT',`${ep}/exerciseId`,`${known.equipment} was marked unavailable. Review your equipment choice.`,SEVERITY.WARNING);
+            if(Array.isArray(e.setBlocks)){
+              const total=e.setBlocks.reduce((sum,block)=>sum+(block?.sets??block?.count??0),0);
+              if(e.sets!==total)add('SET_BLOCK_TOTAL_MISMATCH',`${ep}/setBlocks`,`Set blocks total ${total}, but the exercise total is ${e.sets??'unspecified'}.`,SEVERITY.ERROR,'Edit the block counts or the exercise total so they agree.');
+              for(const [bi,block] of e.setBlocks.entries())for(const issue of validatePrescription({...e,...block,sets:block.sets??block.count,setBlocks:undefined},library).filter(f=>f.severity==='error'))add('INVALID_SET_BLOCK',`${ep}/setBlocks/${bi}`,`Block ${bi+1}: ${issue.message}`,SEVERITY.ERROR);
+            }
             if(MOVEMENT_TYPES.includes(e.trackingType)){
               const m=e.metrics||{},movementType=trackingProfile(known);
               if(!known||movementType!==e.trackingType)add('MOVEMENT_PROFILE_MISMATCH',`${ep}/trackingType`,'Choose a matching timed, loaded-timed or carry exercise from the library.');

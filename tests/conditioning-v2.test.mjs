@@ -83,7 +83,8 @@ test('AI v2 cardio/Metcon strict validation, explicit approval, conversion and m
  assert.doesNotThrow(()=>prepareSession(p.plan[0].sessions[0],library));
 });
 test('AI v2 rejects unknown modalities, cardio in strength fields, bad targets and injected fields',()=>{
- for(const mutate of [e=>e.trackingType='strength',e=>e.metrics.distance=-1,e=>e.metrics.secret='x',e=>e.intervalCount=31,e=>e.exerciseId='not-a-library-exercise']){const d=draft();mutate(d.program.plan[0].sessions[0].exercises[0]);assert.equal(validateDraft(d,library).canApprove,false);}
+ for(const mutate of [e=>e.trackingType='strength',e=>e.metrics.distance=-1,e=>e.metrics.secret='x',e=>e.intervalCount=301,e=>e.exerciseId='not-a-library-exercise']){const d=draft();mutate(d.program.plan[0].sessions[0].exercises[0]);assert.equal(validateDraft(d,library).canApprove,false);}
+ const maxSegments=draft();maxSegments.program.plan[0].sessions[0].exercises[0].intervalCount=300;assert.equal(validateDraft(maxSegments,library).canApprove,true,'cardio prescriptions and the provider schema both allow up to 300 segments');
  const d=draft();d.program.plan[0].sessions[0].exercises[0]={...createFixture().program.plan[0].sessions[0].exercises[0],exerciseId:'rowerg',exerciseName:'RowErg'};assert.equal(validateDraft(d,library).canApprove,false);
 });
 test('AI v2 Metcon-only sessions and legacy v1 both validate; unsupported versions are blocked',()=>{

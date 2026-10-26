@@ -1,0 +1,32 @@
+import {createRequire} from 'node:module';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createFixture} from '../../shared/ai/fixtures.mjs';
+import {chatGPTWorkoutImportEnvelope} from '../../shared/chatgpt-workout-import.mjs';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+
+test('coach imports a six-week workout locally on mobile and it remains unapproved without API writes',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'ih-chatgpt-import-')),port='4238';
+ const server=spawn(process.execPath,['server/index.mjs','--test-server'],{env:{...process.env,PORT:port,HOST:'127.0.0.1',DEMO_MODE:'true',DB_PATH:join(dir,'test.sqlite'),AI_ENABLED:'false'},stdio:['ignore','pipe','pipe']});
+ let output='',browser;server.stdout.on('data',c=>output+=c);server.stderr.on('data',c=>output+=c);
+ t.after(async()=>{await browser?.close();if(server.exitCode===null){const done=once(server,'exit');server.kill();await done;}await rm(dir,{recursive:true,force:true});});
+ for(let i=0;i<150&&!output.includes('Iron Heart Strength:');i++)await new Promise(r=>setTimeout(r,50));assert.match(output,/Iron Heart Strength:/);
+ browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${port}`);
+ const draft=createFixture();draft.schemaVersion=2;draft.program.weeks=6;draft.program.plan=Array.from({length:6},(_,i)=>({week:i+1,sessions:structuredClone(draft.program.plan[0].sessions).map((session,j)=>({...session,blocks:[{id:`week-${i+1}-session-${j+1}`,type:'Strength',name:'Strength work',exerciseIndexes:session.exercises.map((_,n)=>n)}]}))}));
+ const json=JSON.stringify(chatGPTWorkoutImportEnvelope(draft));
+ await page.evaluate(async()=>{await fetch('/api/demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'coach'})});});await page.reload();await page.evaluate(()=>{window.__importWrites=[];const original=window.fetch.bind(window);window.fetch=(input,init={})=>{const url=String(input),method=String(init.method||'GET').toUpperCase();if(method==='POST'&&url.includes('/api/'))window.__importWrites.push({url,method});return original(input,init);};});
+  await page.getByRole('button',{name:'Open navigation'}).click();await page.getByRole('button',{name:'AI Draft Review',exact:true}).click();
+  await page.getByRole('button',{name:'Import from ChatGPT'}).click();await page.getByLabel('Versioned workout JSON').fill(json);await page.getByRole('button',{name:'Check JSON'}).click();
+  await page.getByText(/Structure is valid:.*6 weeks · 6 weeks provided/).waitFor();await page.getByRole('button',{name:'Open in AI Draft Review'}).click();
+  await page.getByLabel('Open draft').selectOption({label:'Draft 1 · Intermediate Strength · Review Sample'});await page.getByText(/CHATGPT IMPORT/).waitFor();await page.locator('.ai-summary:visible').getByText(/awaiting coach approval/).waitFor();
+  const checks=await page.evaluate(()=>({writes:window.__importWrites,overflow:document.documentElement.scrollWidth>innerWidth,approvalDisabled:[...document.querySelectorAll('.ai-actions button')].some(b=>b.textContent.includes('Approve this revision')&&b.disabled)}));
+ assert.deepEqual(checks.writes,[]);assert.equal(checks.overflow,false);assert.equal(checks.approvalDisabled,false,'valid drafts remain subject to explicit coach approval');assert.deepEqual(errors,[]);
+ await page.evaluate(()=>fetch('/api/logout',{method:'POST'}));await page.reload();await page.getByRole('button',{name:'Athlete view',exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'AI Draft Review',exact:true}).count(),0,'athletes do not receive coach draft/import screens');assert.equal(await page.getByRole('button',{name:'Import from ChatGPT'}).count(),0);await context.close();
+});

@@ -1,0 +1,1548 @@
+{
+  "format": "iron-heart-strength-workout",
+  "version": 1,
+  "draft": {
+    "schemaVersion": 2,
+    "status": "draft",
+    "athleteId": null,
+    "sourceProgramId": null,
+    "originalRequest": "Six-week hybrid template showing strength, supersets, running intervals, assessment pace methods, and Metcon scoring. Coach review required.",
+    "assumptions": [],
+    "questions": [],
+    "validationFindings": [],
+    "program": {
+      "name": "Six-Week Hybrid Foundation",
+      "goal": "Build strength and aerobic conditioning",
+      "description": "Example contract document. Review and individualize before use.",
+      "weeks": 6,
+      "coachNotes": "Training days are Monday and Thursday. Confirm athlete readiness and equipment.",
+      "progressionInstructions": "Increase only after coach review. Assessment-based paces are estimates, never measured VO2max.",
+      "plan": [
+        {
+          "week": 1,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 1: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w1-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w1-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 72,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 1: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w1-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w1-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 2,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 2: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w2-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w2-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 73,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 2: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w2-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w2-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 3,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 3: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w3-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w3-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 74,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 3: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w3-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w3-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 4,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 4: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w4-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w4-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 75,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 4: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w4-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w4-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 5,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 5: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w5-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w5-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 76,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 5: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w5-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w5-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 6,
+          "sessions": [
+            {
+              "name": "Monday · Strength + AMRAP",
+              "day": 1,
+              "maxDurationMinutes": 75,
+              "coachNotes": "Keep 1–3 reps in reserve unless the coach changes the target.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bench Press",
+                  "sets": 5,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "athlete_selected",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 8,
+                  "rir": null,
+                  "rest": 150,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "Two loading blocks are examples; set totals equal 5.",
+                  "progressionInstructions": "Week 6: coach reviews actual completed reps and RPE before adjusting.",
+                  "setBlocks": [
+                    {
+                      "sets": 3,
+                      "reps": 5,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "rpe",
+                      "rpe": 8,
+                      "rir": null,
+                      "rest": 150,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Main sets",
+                      "progressionInstructions": ""
+                    },
+                    {
+                      "sets": 2,
+                      "reps": 3,
+                      "repMode": "fixed",
+                      "load": null,
+                      "loadMode": "athlete_selected",
+                      "loadUnit": "lbs",
+                      "loadDelta": null,
+                      "percent1RM": null,
+                      "referenceExerciseId": null,
+                      "referenceExerciseName": null,
+                      "reference1RM": null,
+                      "referenceLoad": null,
+                      "effortMode": "none",
+                      "rpe": null,
+                      "rir": null,
+                      "rest": 120,
+                      "tempo": null,
+                      "increment": 5,
+                      "notes": "Technique back-off",
+                      "progressionInstructions": ""
+                    }
+                  ]
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Bent-over Barbell Row",
+                  "sets": 4,
+                  "reps": 8,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "previous_performance",
+                  "loadUnit": "lbs",
+                  "loadDelta": 5,
+                  "percent1RM": null,
+                  "referenceExerciseId": null,
+                  "referenceExerciseName": null,
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "none",
+                  "rpe": null,
+                  "rir": null,
+                  "rest": 90,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "",
+                  "progressionInstructions": "If no qualifying history exists, coach sets the first target."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w6-strength",
+                  "type": "Strength",
+                  "name": "A1/A2 superset",
+                  "exerciseIndexes": [
+                    0,
+                    1
+                  ],
+                  "superset": true,
+                  "supersetNotes": "Alternate bench and rows; stop if technique degrades.",
+                  "restSeconds": 90
+                },
+                {
+                  "id": "w6-amrap",
+                  "type": "Metcon",
+                  "name": "10-minute conditioning",
+                  "metcon": {
+                    "name": "Example AMRAP",
+                    "scoreType": "AMRAP",
+                    "scoreMode": "rounds_reps",
+                    "format": "standard",
+                    "benchmark": false,
+                    "repScheme": [],
+                    "movements": [
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Burpees",
+                        "reps": 8,
+                        "notes": ""
+                      },
+                      {
+                        "exerciseId": null,
+                        "exerciseName": "Jump Rope",
+                        "reps": 40,
+                        "notes": ""
+                      }
+                    ],
+                    "rounds": null,
+                    "durationSeconds": 600,
+                    "intervalSeconds": null,
+                    "timeCapSeconds": null,
+                    "workSeconds": null,
+                    "restSeconds": null,
+                    "notes": "Record rounds plus additional reps."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Thursday · Squat + Run Intervals",
+              "day": 4,
+              "maxDurationMinutes": 70,
+              "coachNotes": "Running pace is derived only when the athlete has qualifying assessment evidence.",
+              "exercises": [
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Barbell Back Squat",
+                  "sets": 4,
+                  "reps": 5,
+                  "repMode": "fixed",
+                  "load": null,
+                  "loadMode": "percentage",
+                  "loadUnit": "lbs",
+                  "loadDelta": null,
+                  "percent1RM": 77,
+                  "referenceExerciseId": "squat",
+                  "referenceExerciseName": "Barbell Back Squat",
+                  "reference1RM": null,
+                  "referenceLoad": null,
+                  "effortMode": "rpe",
+                  "rpe": 7.5,
+                  "rir": null,
+                  "rest": 180,
+                  "tempo": null,
+                  "increment": 5,
+                  "notes": "No coach-entered 1RM in this example.",
+                  "progressionInstructions": "Week 6: percentage changes by coach review."
+                },
+                {
+                  "exerciseId": null,
+                  "exerciseName": "Outdoor Running",
+                  "trackingType": "running",
+                  "intervalCount": 6,
+                  "restSeconds": 0,
+                  "metrics": {
+                    "distance": null,
+                    "distanceUnit": "mi",
+                    "paceUnit": "mi",
+                    "durationSeconds": null,
+                    "paceSeconds": null
+                  },
+                  "intervals": [
+                    {
+                      "rounds": 6,
+                      "work": {
+                        "durationSeconds": 120
+                      },
+                      "segments": [
+                        {
+                          "kind": "work",
+                          "label": "Work",
+                          "metrics": {
+                            "durationSeconds": 120
+                          }
+                        }
+                      ],
+                      "recovery": {
+                        "durationSeconds": 90
+                      },
+                      "recoveryAfterFinal": false,
+                      "recoveryRule": {
+                        "preset": "threshold",
+                        "recoveryPerWork": 0.75,
+                        "workDurationSeconds": 120
+                      }
+                    }
+                  ],
+                  "paceMethod": {
+                    "type": "assessment",
+                    "source": "six_minute",
+                    "category": "vo2Intervals",
+                    "unit": "mi",
+                    "locked": false
+                  },
+                  "notes": "Do not treat assessment pace as a measured VO2max.",
+                  "progressionInstructions": "Coach reviews interval completion and fatigue before progressing."
+                }
+              ],
+              "blocks": [
+                {
+                  "id": "w6-mixed",
+                  "type": "Strength",
+                  "name": "Squat",
+                  "exerciseIndexes": [
+                    0
+                  ]
+                },
+                {
+                  "id": "w6-run",
+                  "type": "Cardio",
+                  "name": "Assessment-based intervals",
+                  "exerciseIndexes": [
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
