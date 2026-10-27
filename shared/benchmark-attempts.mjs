@@ -78,7 +78,10 @@ export function scoredBenchmarkAttempt(log,definition){
   let candidates=[];
   if(scoring.type==='strength_load')candidates=rows.filter(s=>s.reps===scoring.reps&&s.load!=null).map(s=>({value:convertWeight(s.load,s.loadUnit||'lbs','lbs'),label:`${s.load} ${s.loadUnit||'lbs'} × ${s.reps}`}));
   if(scoring.type==='fastest_time')candidates=rows.filter(s=>s.distance>0&&s.durationSeconds>0&&Math.abs(convertDistance(s.distance,s.distanceUnit||'m','m')-scoring.distanceMeters)/scoring.distanceMeters<=0.005).map(s=>({value:s.durationSeconds,label:`${s.durationSeconds}s for ${s.distance} ${s.distanceUnit||'m'}`}));
-  if(scoring.type==='greatest_distance')candidates=rows.filter(s=>s.distance>0&&s.durationSeconds>0&&Math.abs(s.durationSeconds-scoring.durationSeconds)<=1).map(s=>({value:convertDistance(s.distance,s.distanceUnit||'m','m'),label:`${s.distance} ${s.distanceUnit||'m'} in ${s.durationSeconds}s`}));
+  if(scoring.type==='greatest_distance'){
+    const tolerance=scoring.protocol==='six_minute_max_run'?5:1;
+    candidates=rows.filter(s=>s.distance>0&&s.durationSeconds>0&&Math.abs(s.durationSeconds-scoring.durationSeconds)<=tolerance).map(s=>({value:convertDistance(s.distance,s.distanceUnit||'m','m'),label:`${s.distance} ${s.distanceUnit||'m'} in ${s.durationSeconds}s`}));
+  }
   if(rows.length>1&&rows.every(s=>s.distance>0&&s.durationSeconds>0)){
     const meters=rows.reduce((sum,s)=>sum+convertDistance(s.distance,s.distanceUnit||'m','m'),0),seconds=rows.reduce((sum,s)=>sum+s.durationSeconds,0);
     if(scoring.type==='fastest_time'&&Math.abs(meters-scoring.distanceMeters)/scoring.distanceMeters<=0.005)candidates.push({value:seconds,label:`${seconds}s for ${Math.round(meters)} m of completed work intervals`});

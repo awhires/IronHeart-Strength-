@@ -38,7 +38,7 @@ test('repeated cardio intervals and Metcons retain their prescription while clea
  const target={exerciseId:'erg',trackingType:'erg',intervalCount:2,metrics:{distance:500,distanceUnit:'m'},restSeconds:60};
  const metcon={name:'12-minute AMRAP',scoreType:'AMRAP',durationSeconds:720,repScheme:[],movements:[{exerciseId:'bench',exerciseName:'Bench Press',reps:5}],notes:''};
  const source={id:'mixed',sessionName:'Conditioning',exercises:[{exerciseId:'erg',target,sets:[{distance:500,distanceUnit:'m',durationSeconds:110,completed:true},{distance:500,distanceUnit:'m',durationSeconds:108,completed:true}]}],blocks:[{id:'cardio',type:'Cardio',exerciseIndexes:[0]},{id:'metcon',type:'Metcon',metcon}],blockResults:[{blockId:'metcon',metcon,score:{rx:'RX',rounds:5,reps:10}}]};
- const draft=repeatWorkoutDraft(source,library);assert.equal(draft.exercises[0].sets.length,2);assert.ok(draft.exercises[0].sets.every(s=>s.completed===false&&s.durationSeconds==null&&s.distance==null));assert.equal(draft.blocks[0].type,'Cardio');assert.equal(draft.blockResults[0].blockId,'metcon');assert.equal(draft.blockResults[0].score.rounds,undefined);assert.equal(source.exercises[0].sets[0].durationSeconds,110);
+ const draft=repeatWorkoutDraft(source,library);assert.equal(draft.exercises[0].sets.length,2);assert.ok(draft.exercises[0].sets.every(s=>s.completed===false&&s.durationSeconds==null&&s.distance===500));assert.equal(draft.blocks[0].type,'Cardio');assert.equal(draft.blockResults[0].blockId,'metcon');assert.equal(draft.blockResults[0].score.rounds,undefined);assert.equal(source.exercises[0].sets[0].durationSeconds,110);
 });
 
 test('an unfinished repeat saves as partial and never ranks as a benchmark result',()=>{

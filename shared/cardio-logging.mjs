@@ -17,7 +17,17 @@ export function prescribedCardioIntervals(target){
 }
 export function initialCardioActuals(target,existing){
  if(existing?.sets)return structuredClone(existing.sets);
- return prescribedCardioIntervals(target).map(({work})=>({distanceUnit:work.distanceUnit||(['erg','swimming'].includes(target.trackingType)?'m':'mi'),...(work.paceUnit?{paceUnit:work.paceUnit}:{}),completed:false}));
+ return prescribedCardioIntervals(target).map(({work,recovery})=>{
+  // The prescription remains separate on `target`; these are editable starting
+  // values for the athlete's actual results. RPE is observed effort, not a copy
+  // of the coach's target RPE.
+  const actual=structuredClone(work);delete actual.rpe;
+  actual.distanceUnit=actual.distanceUnit||(['erg','swimming'].includes(target.trackingType)?'m':'mi');
+  if(work.paceUnit)actual.paceUnit=work.paceUnit;
+  if(recovery?.durationSeconds>0)actual.recoverySeconds=recovery.durationSeconds;
+  actual.completed=false;
+  return actual;
+ });
 }
 export function copyPreviousActual(previous,current){
  const {completed,recoverySeconds,blockIndex,...actual}=previous;

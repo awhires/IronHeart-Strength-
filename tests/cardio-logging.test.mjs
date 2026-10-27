@@ -11,11 +11,16 @@ import {cardioStats} from '../shared/cardio-stats.mjs';
 import {createLocalDemo} from '../src/local-demo.mjs';
 const library=[...exercises,...missingTrackingExercises(exercises)];
 const target={exerciseId:'rowerg',trackingType:'erg',intervalCount:2,restSeconds:90,metrics:{distance:500,distanceUnit:'m',paceSeconds:110,rpe:7}};
-test('targets populate interval structure/time/recovery without inventing actual performance; reopening keeps actuals',()=>{
+test('prescribed cardio metrics prefill editable actual rows while target and reopened saved actuals stay separate',()=>{
  const prescribed=prescribedCardioIntervals(target);assert.equal(prescribed.length,2);assert.equal(prescribed[0].work.durationSeconds,110);assert.equal(prescribed[0].work.rpe,7);assert.equal(prescribed[0].recovery.durationSeconds,90);
- const blank=initialCardioActuals(target);assert.equal(blank[0].distance,undefined);assert.equal(blank[0].durationSeconds,undefined);
+ const seeded=initialCardioActuals(target);assert.equal(seeded[0].distance,500);assert.equal(seeded[0].durationSeconds,110);assert.equal(seeded[0].paceSeconds,110);assert.equal(seeded[0].recoverySeconds,90);assert.equal(seeded[0].rpe,undefined);assert.equal(seeded[0].completed,false);assert.equal(seeded[1].recoverySeconds,90,'the prescription includes recovery after the final interval unless explicitly disabled');
+ assert.equal(target.metrics.distance,500);assert.equal(target.metrics.rpe,7,'prescription RPE remains on the separate target');
  const actual={sets:[{distance:450,distanceUnit:'m',durationSeconds:100,recoverySeconds:80,completed:true},{distance:500,distanceUnit:'m',durationSeconds:110,completed:true}]};
  const restored=initialCardioActuals(target,actual);assert.deepEqual(restored,actual.sets);restored[0].distance=999;assert.equal(actual.sets[0].distance,450);assert.equal(target.metrics.distance,500);
+});
+test('six 2:00 running efforts seed actual duration, pace and between-round recovery without marking completion',()=>{
+ const running={exerciseId:'outdoor-running',trackingType:'running',intervalCount:6,metrics:{},intervals:[{rounds:6,work:{durationSeconds:120,distanceUnit:'m',paceSeconds:300,paceUnit:'km',rpe:8},recovery:{durationSeconds:60}}]};
+ const rows=initialCardioActuals(running);assert.equal(rows.length,6);assert.deepEqual(rows.map(s=>s.durationSeconds),Array(6).fill(120));assert.deepEqual(rows.map(s=>s.recoverySeconds),Array(6).fill(60));assert.ok(rows.every(s=>s.paceSeconds===300&&s.paceUnit==='km'&&s.completed===false&&s.rpe===undefined));
 });
 test('previous actual copying does not copy completion or recovery or overwrite targets',()=>{
  const out=copyPreviousActual({distance:500,durationSeconds:100,completed:true,recoverySeconds:99},{recoverySeconds:70});assert.equal(out.distance,500);assert.equal(out.completed,false);assert.equal(out.recoverySeconds,70);
@@ -43,8 +48,8 @@ test('sequential 2x20 70–80lb expands two actual sets; range stays ambiguous',
 test('weighted plank duration and weight import and save structurally',()=>{
  const draft=scan([{exerciseName:'Weighted Plank',notes:'',complex:[],blocks:[{count:2,load:25,loadUnit:'lbs',durationSeconds:45}]}]);const saved=prepareTrackerWorkout({...draft.workout,workoutDate:'2026-10-08'},library);assert.equal(saved.exercises[0].sets[0].durationSeconds,45);assert.equal(saved.exercises[0].sets[0].load,25);assert.equal(saved.exercises[0].sets.length,2);
 });
-test('scanned cardio prescriptions preserve work/recovery separately and leave actuals blank',()=>{
- const draft=scan([{exerciseName:'RowErg',entryKind:'prescribed',notes:'',complex:[],blocks:[],intervals:[{rounds:2,work:{distance:500,distanceUnit:'m',paceSeconds:110},recovery:{durationSeconds:90}}]}]);const e=draft.workout.exercises[0];assert.equal(e.target.intervalCount,2);assert.equal(e.sets[0].durationSeconds,undefined);assert.equal(prescribedCardioIntervals(e.target)[0].work.durationSeconds,110);
+test('scanned cardio prescriptions seed editable actuals and preserve target/recovery separately',()=>{
+ const draft=scan([{exerciseName:'RowErg',entryKind:'prescribed',notes:'',complex:[],blocks:[],intervals:[{rounds:2,work:{distance:500,distanceUnit:'m',paceSeconds:110},recovery:{durationSeconds:90}}]}]);const e=draft.workout.exercises[0];assert.equal(e.target.intervalCount,2);assert.equal(e.sets[0].distance,500);assert.equal(e.sets[0].durationSeconds,110);assert.equal(e.sets[0].recoverySeconds,90);assert.equal(e.sets[0].completed,false);assert.equal(prescribedCardioIntervals(e.target)[0].work.durationSeconds,110);
  const saved=prepareTrackerWorkout({sessionName:'Scan',workoutDate:'2026-10-08',exercises:[{...e,blocks:undefined,sets:e.sets.map(s=>({...s,distance:500,durationSeconds:115,completed:true,recoverySeconds:95}))}]},library);assert.equal(saved.exercises[0].target.intervals[0].recovery.durationSeconds,90);assert.equal(saved.exercises[0].sets[0].recoverySeconds,95);
  assert.ok(SCAN_SCHEMA.properties.exercises.items.properties.intervals);assert.throws(()=>scan([{exerciseName:'RowErg',complex:[],blocks:[],intervals:[{rounds:99,work:{distance:500},recovery:{}}]}]));
 });

@@ -3,20 +3,23 @@ import {convertDistance,trackingProfile} from './tracking.mjs';
 import {scoredBenchmarkAttempt} from './benchmark-attempts.mjs';
 
 const positive=n=>typeof n==='number'&&Number.isFinite(n)&&n>0;
+export const SIX_MINUTE_TEST_SECONDS=360;
+export const SIX_MINUTE_TEST_TOLERANCE_SECONDS=5;
 const dateOf=log=>log.workoutDate||log.createdAt?.slice(0,10)||'';
 const running=(exerciseId,library)=>['running','treadmill'].includes(trackingProfile(library.find(e=>e.id===exerciseId)));
 const workSets=(log,exerciseId)=>log.status==='skipped'?[]:(log.exercises||[]).filter(e=>e.exerciseId===exerciseId&&e.status!=='skipped').flatMap(e=>(e.sets||[]).filter(s=>s.completed!==false));
 
 // A six-minute result is a field-test velocity proxy only. It is never a VO2 measurement.
 export function sixMinuteAssessment(log,definition,library){
- if(definition?.scoring?.protocol!=='six_minute_max_run'||definition.scoring.type!=='greatest_distance'||definition.scoring.durationSeconds!==360||!running(definition.scoring.exerciseId,library)||log.athleteId==null||log.benchmarkId!==definition.id)return null;
+ if(definition?.scoring?.protocol!=='six_minute_max_run'||definition.scoring.type!=='greatest_distance'||definition.scoring.durationSeconds!==SIX_MINUTE_TEST_SECONDS||!running(definition.scoring.exerciseId,library)||log.athleteId==null||log.benchmarkId!==definition.id)return null;
  const score=scoredBenchmarkAttempt(log,definition);
  const rows=workSets(log,definition.scoring.exerciseId).map(s=>cardioMetrics(s,'running'));
  const actualSeconds=rows.every(r=>positive(r.seconds))?rows.reduce((n,r)=>n+r.seconds,0):null;
  const actualMeters=rows.every(r=>positive(r.meters))?rows.reduce((n,r)=>n+r.meters,0):null;
  const maximal=log.assessmentMaximal===true;
- const qualified=!!score&&maximal&&rows.length===1&&positive(actualMeters)&&actualSeconds!=null&&Math.abs(actualSeconds-360)<=1;
- return {logId:log.id,athleteId:log.athleteId,benchmarkId:definition.id,date:dateOf(log),meters:actualMeters,seconds:actualSeconds,velocityMps:actualMeters&&actualSeconds?actualMeters/actualSeconds:null,maximal,qualified,notes:log.notes||'',reason:qualified?null:!maximal?'Maximal effort was not confirmed.':!score?'Incomplete or changed benchmark attempt.':rows.length!==1?'Record one continuous six-minute effort.':'Actual six-minute distance and elapsed time are required.'};
+ const qualified=log.status==='completed'&&!!score&&maximal&&rows.length===1&&positive(actualMeters)&&actualSeconds!=null&&Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)<=SIX_MINUTE_TEST_TOLERANCE_SECONDS;
+ const reason=qualified?null:log.status!=='completed'?'Workout must be completed.':!maximal?'Maximal effort was not confirmed.':rows.length!==1?'Record one continuous six-minute effort.':!positive(actualMeters)||actualSeconds==null?'Actual distance and elapsed time are required.':Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)>SIX_MINUTE_TEST_TOLERANCE_SECONDS?'Elapsed time must be approximately 6:00.':!score?'Incomplete or changed benchmark attempt.':'Assessment requirements were not met.';
+ return {logId:log.id,athleteId:log.athleteId,benchmarkId:definition.id,date:dateOf(log),meters:actualMeters,seconds:actualSeconds,velocityMps:qualified?actualMeters/actualSeconds:null,maximal,qualified,notes:log.notes||'',reason};
 }
 
 export function runningAssessments(logs,definitions,library,athleteId){
