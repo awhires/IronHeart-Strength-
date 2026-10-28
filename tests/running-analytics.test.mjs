@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {prepareBenchmark} from '../shared/benchmark-attempts.mjs';
+import {scoredBenchmarkAttempt} from '../shared/benchmark-attempts.mjs';
 import {benchmarkWorkoutDraft} from '../shared/phase3.mjs';
 import {runningAssessments,runningTimeTrials,runningPaceRecommendations,runningIntervalFatigue,applyRunningPace} from '../shared/running-analytics.mjs';
 import {convertDistance} from '../shared/tracking.mjs';
@@ -22,7 +23,15 @@ test('six-minute benchmark requires one prescribed running effort and athlete ma
  const noDistance=attempt('no-distance','2030-03-05',1500,{exercises:[{exerciseId:'run',sets:[{durationSeconds:360,completed:true}]}]});assert.equal(runningAssessments([noDistance],[definition],library,'a')[0].qualified,false);
  const tooLong=attempt('too-long','2030-03-06',1500,{exercises:[{exerciseId:'run',sets:[{distance:1500,distanceUnit:'m',durationSeconds:354,completed:true}]}]});assert.equal(runningAssessments([tooLong],[definition],library,'a')[0].qualified,false);
  const split=attempt('split','2030-04-01',1500,{exercises:[{exerciseId:'run',sets:[{distance:750,distanceUnit:'m',durationSeconds:180,completed:true},{distance:750,distanceUnit:'m',durationSeconds:180,completed:true}]}]});assert.equal(runningAssessments([split],[definition],library,'a')[0].qualified,false);
- assert.equal(runningAssessments([attempt('one','2030-01-01',1500,{benchmarkSignature:'changed'})],[definition],library,'a')[0].qualified,false);
+ assert.equal(runningAssessments([attempt('one','2030-01-01',1500,{benchmarkSignature:'changed'})],[definition],library,'a')[0].qualified,true,'qualification uses linked confirmed actual distance/time');
+ assert.equal(scoredBenchmarkAttempt(attempt('signature-drift','2030-01-01',1500,{benchmarkSignature:'legacy assigned prescription'}),definition)?.value,1500,'six-minute comparison scores the linked test result despite legacy prescription snapshot drift');
+});
+
+test('legacy scheduled six-minute results remain visible but cannot qualify without a benchmark link and maximal confirmation',()=>{
+ const legacy={id:'legacy-assigned',athleteId:'a',assignmentId:'assignment',sessionName:'Six-minute run',status:'completed',workoutDate:'2030-01-05',exercises:[{exerciseId:'run',sets:[{distance:.83,distanceUnit:'mi',durationSeconds:360,completed:true}]}]};
+ const row=runningAssessments([legacy],[definition],library,'a')[0];
+ assert.equal(row.qualified,false);assert.equal(row.maximal,null);assert.ok(Math.abs(row.meters-convertDistance(.83,'mi','m'))<1e-6);assert.equal(row.seconds,360);assert.match(row.reason,/without a benchmark link or maximal-effort confirmation/);
+ const unrelated={...legacy,id:'other',athleteId:'another'};assert.equal(runningAssessments([unrelated],[definition],library,'a').length,0,'history remains athlete-scoped');
 });
 
 test('pace recommendations use only qualifying evidence and preserve separate observed trial methods',()=>{

@@ -59,8 +59,12 @@ function matchingSignature(actual,expected){
  }catch{return false;}
 }
 export function scoredBenchmarkAttempt(log,definition){
-  if(log.benchmarkId!==definition.id||!matchingSignature(log.benchmarkSignature,definition.signature)||log.status&&log.status!=='completed')return null;
   const scoring=definition.scoring;
+  // A six-minute field test is the same comparison when its linked definition,
+  // running exercise, actual continuous duration and actual distance are intact.
+  // Prescription snapshots may differ on legacy assigned logs; other benchmark
+  // types still require an exact structural signature.
+  if(log.benchmarkId!==definition.id||scoring.protocol!=='six_minute_max_run'&&!matchingSignature(log.benchmarkSignature,definition.signature)||log.status&&log.status!=='completed')return null;
   if(scoring.type==='metcon'){
     const row=log.blockResults?.find(r=>r.blockId===scoring.blockId&&r.status!=='skipped'&&metconKey(r.metcon)===scoring.metconKey);
     if(!row?.score)return null;

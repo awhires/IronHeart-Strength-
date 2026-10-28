@@ -60,7 +60,7 @@ test('desktop and mobile: library selector opens, filters and adds; M:SS and mix
  });
  await t.test('mobile score-type forms show AMRAP and EMOM fields and save structured assessment scores',async()=>{
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),base='http://127.0.0.1:4196';page.setDefaultTimeout(12000);
-  await page.request.post(base+'/api/demo',{data:{role:'coach'}});await page.goto(base);if(await page.getByRole('button',{name:'Coach view',exact:true}).count())await page.getByRole('button',{name:'Coach view',exact:true}).click();await page.getByRole('button',{name:'Create program',exact:true}).click();
+  await page.request.post(base+'/api/demo',{data:{role:'coach'}});await page.goto(base);const createProgram=page.getByRole('button',{name:'Create program',exact:true});await createProgram.waitFor({state:'visible'});await createProgram.click();
   const editor=page.getByRole('dialog');await editor.getByLabel('New block type').selectOption('Metcon');await editor.getByRole('button',{name:'+ Add workout block',exact:true}).click();await editor.getByLabel('Score type').selectOption('AMRAP');
   assert.equal(await editor.getByLabel('Workout duration (M:SS)').count(),1);assert.equal(await editor.getByLabel('Time cap (M:SS)').count(),0);assert.equal(await editor.getByLabel('Work interval (M:SS)').count(),0);assert.equal(await editor.getByLabel('Result scoring').count(),1);
   await editor.getByLabel('Score type').selectOption('EMOM');assert.equal(await editor.getByLabel('Interval length (M:SS)').count(),1);assert.equal(await editor.getByLabel('Shared rep scheme (optional)').count(),0);

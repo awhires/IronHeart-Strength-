@@ -12,19 +12,37 @@ const workSets=(log,exerciseId)=>log.status==='skipped'?[]:(log.exercises||[]).f
 // A six-minute result is a field-test velocity proxy only. It is never a VO2 measurement.
 export function sixMinuteAssessment(log,definition,library){
  if(definition?.scoring?.protocol!=='six_minute_max_run'||definition.scoring.type!=='greatest_distance'||definition.scoring.durationSeconds!==SIX_MINUTE_TEST_SECONDS||!running(definition.scoring.exerciseId,library)||log.athleteId==null||log.benchmarkId!==definition.id)return null;
- const score=scoredBenchmarkAttempt(log,definition);
- const rows=workSets(log,definition.scoring.exerciseId).map(s=>cardioMetrics(s,'running'));
+ // Assessment qualification is based on linked, confirmed actual test data.
+ // Benchmark score-signature matching remains in benchmark-history comparisons,
+ // but must not reject an otherwise valid actual six-minute field test.
+ const entries=(log.exercises||[]).filter(e=>e.exerciseId===definition.scoring.exerciseId&&e.status!=='skipped');
+ const rawRows=entries.flatMap(e=>e.sets||[]),rows=workSets(log,definition.scoring.exerciseId).map(s=>cardioMetrics(s,'running'));
  const actualSeconds=rows.every(r=>positive(r.seconds))?rows.reduce((n,r)=>n+r.seconds,0):null;
  const actualMeters=rows.every(r=>positive(r.meters))?rows.reduce((n,r)=>n+r.meters,0):null;
  const maximal=log.assessmentMaximal===true;
- const qualified=log.status==='completed'&&!!score&&maximal&&rows.length===1&&positive(actualMeters)&&actualSeconds!=null&&Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)<=SIX_MINUTE_TEST_TOLERANCE_SECONDS;
- const reason=qualified?null:log.status!=='completed'?'Workout must be completed.':!maximal?'Maximal effort was not confirmed.':rows.length!==1?'Record one continuous six-minute effort.':!positive(actualMeters)||actualSeconds==null?'Actual distance and elapsed time are required.':Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)>SIX_MINUTE_TEST_TOLERANCE_SECONDS?'Elapsed time must be approximately 6:00.':!score?'Incomplete or changed benchmark attempt.':'Assessment requirements were not met.';
+ const qualified=log.status==='completed'&&maximal&&rows.length===1&&positive(actualMeters)&&actualSeconds!=null&&Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)<=SIX_MINUTE_TEST_TOLERANCE_SECONDS;
+ const reason=qualified?null:log.status!=='completed'?'Workout must be completed.':!maximal?'Maximal effort was not confirmed; this cannot be inferred from the result.':rawRows.some(s=>s.completed===false)?'The running effort is marked incomplete.':entries.length!==1||rawRows.length!==1?'Record one continuous six-minute effort.':!positive(actualMeters)||actualSeconds==null?'Actual distance and elapsed time are required.':Math.abs(actualSeconds-SIX_MINUTE_TEST_SECONDS)>SIX_MINUTE_TEST_TOLERANCE_SECONDS?'Elapsed time must be approximately 6:00.':'Assessment requirements were not met.';
  return {logId:log.id,athleteId:log.athleteId,benchmarkId:definition.id,date:dateOf(log),meters:actualMeters,seconds:actualSeconds,velocityMps:qualified?actualMeters/actualSeconds:null,maximal,qualified,notes:log.notes||'',reason};
 }
 
 export function runningAssessments(logs,definitions,library,athleteId){
  const byId=new Map((definitions||[]).filter(d=>d.scoring?.protocol==='six_minute_max_run').map(d=>[d.id,d]));
- return (logs||[]).filter(l=>l.athleteId===athleteId&&byId.has(l.benchmarkId)).map(l=>sixMinuteAssessment(l,byId.get(l.benchmarkId),library)).filter(Boolean).sort((a,b)=>a.date.localeCompare(b.date)||a.logId.localeCompare(b.logId));
+ const owned=(logs||[]).filter(l=>l.athleteId===athleteId),linked=owned.filter(l=>byId.has(l.benchmarkId)).map(l=>sixMinuteAssessment(l,byId.get(l.benchmarkId),library)).filter(Boolean),seen=new Set(linked.map(row=>row.logId));
+ // Older assigned-session logs did not carry a benchmark ID or confirmation.
+ // Show a conservative diagnostic when the exact saved session and exercise match;
+ // never qualify these records or infer maximal effort.
+ const unlinked=[];
+ for(const log of owned){
+  if(seen.has(log.id)||log.benchmarkId||!byId.size)continue;
+  const definition=[...byId.values()].find(d=>(log.sessionName||'').trim().toLocaleLowerCase()===(d.session?.name||d.name||'').trim().toLocaleLowerCase()&&(log.exercises||[]).some(e=>e.exerciseId===d.scoring.exerciseId));
+  if(!definition)continue;
+  const rows=workSets(log,definition.scoring.exerciseId).map(s=>cardioMetrics(s,'running'));
+  const meters=rows.length&&rows.every(row=>positive(row.meters))?rows.reduce((sum,row)=>sum+row.meters,0):null;
+  const seconds=rows.length&&rows.every(row=>positive(row.seconds))?rows.reduce((sum,row)=>sum+row.seconds,0):null;
+  const reason=log.status!=='completed'?'Workout must be completed.':!rows.length||!positive(meters)||seconds==null?'Actual distance and elapsed time are required.':'This saved session was logged without a benchmark link or maximal-effort confirmation; it cannot qualify retroactively.';
+  unlinked.push({logId:log.id,athleteId:log.athleteId,benchmarkId:definition.id,date:dateOf(log),meters,seconds,velocityMps:null,maximal:null,qualified:false,notes:log.notes||'',reason});seen.add(log.id);
+ }
+ return [...linked,...unlinked].sort((a,b)=>a.date.localeCompare(b.date)||a.logId.localeCompare(b.logId));
 }
 
 export function runningTimeTrials(logs,definitions,library,athleteId){

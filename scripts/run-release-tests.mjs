@@ -22,6 +22,7 @@ const omitted=files.filter(entry=>excluded.has(entry.name)).map(entry=>entry.nam
 if(!selected.length)throw new Error(`No ${scope} release tests found.`);
 console.log(`Iron Heart ${scope} release suite: ${selected.length} test files.`);
 console.log(omitted.length?`Explicitly excluded unfinished MCP/external-drafts tests: ${omitted.join(', ')}`:'No unfinished MCP/external-drafts tests found.');
-const child=spawn(process.execPath,['--test','--test-concurrency=1',...selected],{cwd:root,stdio:'inherit',env:process.env});
+const env=scope==='browser'?{...process.env,IH_UI_TEST_SERVER:'true',VITE_API_URL:'',VITE_API_BASE_URL:''}:process.env;
+const child=spawn(process.execPath,['--test','--test-concurrency=1',...selected],{cwd:root,stdio:'inherit',env});
 child.on('error',error=>{console.error(error);process.exitCode=1;});
 child.on('exit',(code,signal)=>{if(signal){console.error(`Test runner stopped by ${signal}.`);process.exitCode=1;}else process.exitCode=code??1;});
