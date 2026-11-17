@@ -1,0 +1,3 @@
+.draft-inbox { min-width: 0; }
+.draft-inbox > .panel > .row { flex-wrap: wrap; gap: 8px; }
+.draft-inbox > .panel > .row > button { max-width: 100%; white-space: normal; }

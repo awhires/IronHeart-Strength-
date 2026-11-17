@@ -1,3 +1,4 @@
+import {createExternalDraftInbox,INBOX_MAX_BYTES} from './external-drafts.mjs';
 import {sessionRecommendations,withAthleteRecommendations} from '../shared/adaptive-prescriptions.mjs';
 import {propagateProgram} from '../shared/program-sync.mjs';
 import {prepareStrengthGoal,prepareStrengthPR} from '../shared/strength-progress.mjs';
@@ -45,6 +46,10 @@ const demo=process.env.DEMO_MODE === 'true' || (!production && process.env.DEMO_
 if (production && demo) throw new Error('Demo mode cannot run in production. Use a separate production database.');
 const store=openStore(process.env.DB_PATH || `./data/${demo?'demo':'iron-heart'}.sqlite`,demo);
 const {db,all,get,put,addUser}=store;
+// The inbox is opt-in in every environment. Production use still goes through
+// the normal authenticated coach session and coach-only endpoint checks.
+const draftInboxEnabled=process.env.DRAFT_INBOX_ENABLED==='true';
+const draftInbox=draftInboxEnabled?createExternalDraftInbox({db,library:()=>all('exercise')}):null;
 const generationJobs=createGenerationJobs({db,staged,config:generationConfig(),library:()=>all('exercise'),athleteFor:id=>db.prepare("SELECT id,sport FROM users WHERE id=? AND role='athlete'").get(id)});
 const workoutReceipt=workoutReceipts(store);
 if (!demo && db.prepare("SELECT id FROM users WHERE email LIKE '%@ironheart.demo' LIMIT 1").get()) throw new Error('Demo database cannot be used in production.');
@@ -92,7 +97,7 @@ const server=http.createServer(async(req,res)=>{
     if(origin && origin!==ownOrigin && !allowed.includes(origin))fail(403,'Origin not allowed.');
     if(origin&&allowed.includes(origin)){res.setHeader('Access-Control-Allow-Origin',origin);res.setHeader('Vary','Origin');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization, Idempotency-Key');res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, DELETE, OPTIONS');}
     if(req.method==='OPTIONS'){res.writeHead(204);return res.end();}
-    const b=['POST','PUT','DELETE'].includes(req.method)?await body(req,url.pathname==='/api/ai/workout-scan'?5700000:200000):{};
+    const b=['POST','PUT','DELETE'].includes(req.method)?await body(req,url.pathname==='/api/ai/workout-scan'?5700000:draftInboxEnabled&&url.pathname.startsWith('/api/external-drafts')?INBOX_MAX_BYTES:draftInboxEnabled&&['/api/ai/approve','/api/ai/programs'].includes(url.pathname)?4*INBOX_MAX_BYTES:200000):{};
     let result;
     const route=url.pathname;
     if(route==='/api/health'){result={service:'iron-heart',ok:true,aiAvailable:generation.status().available};}
@@ -113,7 +118,7 @@ const server=http.createServer(async(req,res)=>{
       const owned=id=>{const a=get('assignment',id);if(!a)fail(404,'Program not found.');if(u.role!=='coach'&&a.athleteId!==u.id)fail(403,'This program belongs to another athlete.');return a;};
       if(route==='/api/me')result=publicUser(u);
       else if(route==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(tokenHash(token));res.setHeader('Set-Cookie','ihs_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');result={ok:true};}
-      else if(route==='/api/data'&&req.method==='GET'){const assignments=all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),programs=all('program'),discover=u.role==='athlete'?programs.filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[],athleteLogs=u.role==='athlete'?all('log').filter(l=>l.athleteId===u.id):[],savedBenchmarks=all('benchmark').filter(x=>u.role==='coach'?x.coachId===u.id:assignments.some(a=>a.programId===x.programId)||athleteLogs.some(l=>l.benchmarkId===x.id));result={user:publicUser(u),demo,exercises:all('exercise'),programs:u.role==='coach'?programs:[],discover,athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments,strengthGoals:all('strengthGoal').filter(g=>u.role==='coach'||g.athleteId===u.id),strengthPRs:all('strengthPR').filter(p=>u.role==='coach'||p.athleteId===u.id),logs:u.role==='coach'?all('log'):athleteLogs,benchmarks:benchmarkDefinitions(u.role==='coach'?programs:[],assignments),savedBenchmarks};}
+      else if(route==='/api/data'&&req.method==='GET'){const assignments=all('assignment').filter(a=>u.role==='coach'||a.athleteId===u.id),programs=all('program'),discover=u.role==='athlete'?programs.filter(p=>discoverable(p,u.id)).map(({discover,...p})=>p):[],athleteLogs=u.role==='athlete'?all('log').filter(l=>l.athleteId===u.id):[],savedBenchmarks=all('benchmark').filter(x=>u.role==='coach'?x.coachId===u.id:assignments.some(a=>a.programId===x.programId)||athleteLogs.some(l=>l.benchmarkId===x.id));result={user:publicUser(u),demo,draftInboxEnabled:draftInboxEnabled&&u.role==='coach',exercises:all('exercise'),programs:u.role==='coach'?programs:[],discover,athletes:u.role==='coach'?db.prepare("SELECT id,name,email,role,sport FROM users WHERE role='athlete'").all():[],assignments,strengthGoals:all('strengthGoal').filter(g=>u.role==='coach'||g.athleteId===u.id),strengthPRs:all('strengthPR').filter(p=>u.role==='coach'||p.athleteId===u.id),logs:u.role==='coach'?all('log'):athleteLogs,benchmarks:benchmarkDefinitions(u.role==='coach'?programs:[],assignments),savedBenchmarks};}
       else if(route==='/api/benchmarks'&&req.method==='POST'){coach();const program=get('program',b.programId);if(!program)fail(404,'Program not found.');const definition=checked(()=>prepareBenchmark(b,program,all('exercise'),{id:randomUUID(),coachId:u.id,createdAt:new Date().toISOString()}));result=put('benchmark',definition,u.id);}
       else if(route==='/api/ask-ai'&&req.method==='POST'){
         const athleteId=u.role==='coach'?b.athleteId:u.id;
@@ -156,8 +161,16 @@ const server=http.createServer(async(req,res)=>{
           try{result=await generationJobs.run(u.id,jobId,action,req.headers['idempotency-key'],{signal:controller.signal});}finally{res.off('close',onClose);}
         }else fail(404,'Generation job endpoint not found.');
       }
-      else if(route==='/api/ai/approve'&&req.method==='POST'){coach();result=checked(()=>draftSaves.approve(b,all('exercise'),u.id));}
-      else if(route==='/api/ai/programs'&&req.method==='POST'){coach();result=checked(()=>draftSaves.save(b,all('exercise'),u.id,p=>put('program',prepareProgram(p,all('exercise')))));}
+      else if(route==='/api/external-drafts'||route.startsWith('/api/external-drafts/')){
+        coach();if(!draftInbox)fail(404,'Draft inbox is not enabled.');
+        if(route==='/api/external-drafts'&&req.method==='POST'){limit(req);result=draftInbox.create(u.id,b,req.headers['idempotency-key']);}
+        else if(route==='/api/external-drafts'&&req.method==='GET')result=draftInbox.list(u.id);
+        else if(route.startsWith('/api/external-drafts/')&&req.method==='GET')result=draftInbox.get(u.id,route.slice('/api/external-drafts/'.length));
+        else if(route.startsWith('/api/external-drafts/')&&req.method==='PUT')result=draftInbox.update(u.id,route.slice('/api/external-drafts/'.length),b);
+        else fail(405,'Method not allowed.');
+      }
+      else if(route==='/api/ai/approve'&&req.method==='POST'){coach();if(b.inbox){if(!draftInbox)fail(404,'Draft inbox is not enabled.');draftInbox.checkReview(u.id,b);}result=checked(()=>draftSaves.approve(b,all('exercise'),u.id));}
+      else if(route==='/api/ai/programs'&&req.method==='POST'){coach();const save=()=>checked(()=>draftSaves.save(b,all('exercise'),u.id,p=>put('program',prepareProgram(p,all('exercise')))));if(b.inbox){if(!draftInbox)fail(404,'Draft inbox is not enabled.');result=draftInbox.saveApproved(u.id,b,save);}else result=save();}
       else if(route==='/api/delete'&&req.method==='POST'){
         if(b.kind==='athlete'){coach();if(!db.prepare("SELECT id FROM users WHERE id=? AND role='athlete'").get(b.id))fail(404,'Athlete not found.');db.prepare('DELETE FROM records WHERE owner=?').run(b.id);db.prepare('DELETE FROM users WHERE id=?').run(b.id);result={ok:true};}
         else {

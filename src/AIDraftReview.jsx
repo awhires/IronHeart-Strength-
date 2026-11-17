@@ -26,7 +26,8 @@ function Field({label,path,findings,children}){
 function NumberInput({value,onChange,...props}){return <input type="number" value={value??''} onChange={e=>onChange(parseOptionalNumber(e.target.value))} {...props}/>;}
 
 export default function AIDraftReview({exercises,coachId,request,onSaved,initialGeneration,onRegenerate,onImportDraft}){
-  const [review,setReview]=useState(()=>createReview(initialGeneration?.draft||createFixture())),[weekIndex,setWeekIndex]=useState(0),[fixture,setFixture]=useState('valid'),[warningsReviewed,setWarningsReviewed]=useState(false),[converted,setConverted]=useState(null),[actionError,setActionError]=useState(''),[receipt,setReceipt]=useState(null),[pending,setPending]=useState(false),[saved,setSaved]=useState(null);
+  const [review,setReview]=useState(()=>createReview(initialGeneration?.draft||createFixture())),[weekIndex,setWeekIndex]=useState(0),[fixture,setFixture]=useState('valid'),[warningsReviewed,setWarningsReviewed]=useState(false),[converted,setConverted]=useState(null),[actionError,setActionError]=useState(''),[receipt,setReceipt]=useState(null),[pending,setPending]=useState(false),[saved,setSaved]=useState(initialGeneration?.savedProgram||null);
+  const [inbox,setInbox]=useState(initialGeneration?.inbox||null),[draftNotice,setDraftNotice]=useState('');
   const requirements=initialGeneration?.requirements||FIXTURE_REQUIREMENTS;
   const programming=initialGeneration?.programming;
   const draft=review.draft,p=draft.program;
@@ -34,21 +35,28 @@ export default function AIDraftReview({exercises,coachId,request,onSaved,initial
   const approved=isApproved(review,exercises,requirements);
   const status=approved?DRAFT_STATUS.APPROVED:validation.counts.error||validation.counts.warning?DRAFT_STATUS.NEEDS_REVIEW:DRAFT_STATUS.DRAFT;
   const findings=validation.findings;
-  const edit=fn=>{setReceipt(null);setSaved(null);setReview(r=>editReview(r,fn));setWarningsReviewed(false);setConverted(null);setActionError('');};
+  const edit=fn=>{setDraftNotice('Unsaved draft edits');setReceipt(null);setSaved(null);setReview(r=>editReview(r,fn));setWarningsReviewed(false);setConverted(null);setActionError('');};
   const program=(key,value)=>edit(d=>{d.program[key]=value;});
   const session=(si,key,value)=>edit(d=>{d.program.plan[weekIndex].sessions[si][key]=value;});
   const exercise=(si,ei,key,value)=>edit(d=>{d.program.plan[weekIndex].sessions[si].exercises[ei][key]=value;});
   const reference=(si,ei,key,value)=>edit(d=>{d.program.plan[weekIndex].sessions[si].exercises[ei].reference1RM[key]=value;});
   const field=(label,path,child)=> <Field label={label} path={path} findings={findings}>{child}</Field>;
   const loadFixture=kind=>{setReceipt(null);setSaved(null);setFixture(kind);setReview(createReview(createFixture(kind)));setWeekIndex(0);setWarningsReviewed(false);setConverted(null);setActionError('');};
-  const approve=async()=>{setPending(true);try{const next=approveReview(review,exercises,requirements,{coachId,warningsReviewed});const result=await request('ai/approve','POST',{review:next,requirements,...(programming?{programming}:{})});setReview(next);setReceipt(result.receipt);setActionError('');}catch(e){setActionError(e.message);}finally{setPending(false);}};
-  const save=async()=>{setPending(true);setActionError('');try{const result=await request('ai/programs','POST',{review,requirements,receipt,...(programming?{programming}:{})});setSaved(result);await onSaved?.(result);}catch(e){setActionError(e.message);if(/Approval expired|exact draft revision/.test(e.message)){setReceipt(null);setReview(r=>({...r,approval:null,draft:{...r.draft,status:DRAFT_STATUS.NEEDS_REVIEW}}));}}finally{setPending(false);}};
+  const persistDraft=async()=>{
+    if(!inbox)return null;
+    const result=await request(`external-drafts/${inbox.id}`,'PUT',{revision:inbox.revision,draft:{...review.draft,status:'draft',validationFindings:[]}});
+    const next={id:result.id,revision:result.revision};setInbox(next);setDraftNotice('Draft edits saved');return next;
+  };
+  const saveDraft=async()=>{setPending(true);setActionError('');try{await persistDraft();setReceipt(null);setReview(r=>({...r,approval:null,draft:{...r.draft,status:'draft'}}));}catch(e){setActionError(e.message);}finally{setPending(false);}};
+  const approve=async()=>{setPending(true);try{const currentInbox=await persistDraft();const next=approveReview(review,exercises,requirements,{coachId,warningsReviewed});const result=await request('ai/approve','POST',{review:next,requirements,...(currentInbox?{inbox:currentInbox}:{}),...(programming?{programming}:{})});setReview(next);setReceipt(result.receipt);setActionError('');}catch(e){setActionError(e.message);}finally{setPending(false);}};
+  const save=async()=>{setPending(true);setActionError('');try{const result=await request('ai/programs','POST',{review,requirements,receipt,...(inbox?{inbox}:{}),...(programming?{programming}:{})});setSaved(result);await onSaved?.(result);}catch(e){setActionError(e.message);if(/Approval expired|exact draft revision/.test(e.message)){setReceipt(null);setReview(r=>({...r,approval:null,draft:{...r.draft,status:DRAFT_STATUS.NEEDS_REVIEW}}));}}finally{setPending(false);}};
   const convert=()=>{try{setConverted(toIronHeartProgram(review,exercises,requirements));setActionError('');}catch(e){setActionError(e.message);}};
   const w=p.plan[weekIndex];
-  return <div className="ai-review"><fieldset disabled={pending} className="ai-review-controls">
+  return <div className="ai-review"><fieldset disabled={pending||!!(inbox&&saved)} className="ai-review-controls">
     <div className="page-heading"><div><div className="eyebrow">IRON HEART · AI FOUNDATION</div><h1>AI Draft Review</h1><p>Review the plan. Make it yours. Approve only when it’s ready.</p></div><span className="badge">{initialGeneration?`${initialGeneration.source==='chatgpt-import'?'CHATGPT IMPORT':'AI DRAFT'} · ${initialGeneration.metadata.provider}`:'PRACTICE SAMPLE'}</span></div>
-    <div className="ai-prototype-note"><Sparkles size={20}/><p>{initialGeneration?.source==='chatgpt-import'?'This workout was imported from ChatGPT and needs your review.':initialGeneration?'This draft was generated by AI and needs your review.':'This is a practice sample.'} Unsaved edits disappear on refresh. Approval reviews this revision; Save as new program creates a template. Assignment is a separate action.</p></div>
+    <div className="ai-prototype-note"><Sparkles size={20}/><p>{initialGeneration?.source==='chatgpt-import'?'This workout was imported from ChatGPT and needs your review.':initialGeneration?'This draft was generated by AI and needs your review.':'This is a practice sample.'} {inbox?'Use Save draft edits before leaving; approval also saves your edits.':'Unsaved edits disappear on refresh.'} Approval reviews this revision; Save as new program creates a template. Assignment is a separate action.</p></div>
     {initialGeneration&&<p role="status">Received {p.plan.length} of {requirements.programWeeks||p.weeks||'?'} requested weeks.{initialGeneration.metadata.completionAttempts>1?' An automatic completion retry was attempted.':''}{initialGeneration.metadata.repairErrorCode?' Completion retry failed: '+initialGeneration.metadata.repairErrorCode+'. Regenerate the draft.':''}</p>}
+    {inbox&&<div className="ai-sample-toolbar"><button className="btn secondary" onClick={saveDraft} disabled={!!saved}>Save draft edits</button><span role="status">{draftNotice||`Inbox revision ${inbox.revision}`}</span></div>}
     <section className="panel ai-summary" aria-label="Validation summary">
       <div className="ai-summary-top"><div><h2>{STATUS_LABELS[status]}</h2><p>Revision {review.revision}{approved?' · approved by you':' · awaiting coach approval'}</p></div><div className="ai-counts" aria-live="polite"><span className="ai-count error">{validation.counts.error} Errors</span><span className="ai-count warning">{validation.counts.warning} Warnings</span><span className="ai-count info">{validation.counts.info} Info</span></div></div>
       <p className="ai-summary-caption">Errors prevent approval. Warnings need your acknowledgement. Any edit invalidates approval.</p>

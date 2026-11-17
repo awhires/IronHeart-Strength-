@@ -7,11 +7,11 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const scope=process.argv[2];
 if(!['automated','browser'].includes(scope))throw new Error('Usage: node scripts/run-release-tests.mjs <automated|browser>');
 
-// These are preserved development tests for the deliberately unfinished external
-// Draft Inbox/MCP integration. They are excluded from release verification only.
+// The unfinished MCP integration stays excluded. Durable Draft Inbox tests
+// are included in release verification.
 const excluded=new Set(scope==='browser'
-  ?['external-drafts.browser.mjs']
-  :['external-drafts-api.test.mjs','mcp-drafts.test.mjs']);
+  ?[]
+  :[ 'mcp-drafts.test.mjs']);
 const folder=join(root,'tests',scope==='browser'?'ui':'');
 const suffix=scope==='browser'?'.browser.mjs':'.test.mjs';
 const files=(await readdir(folder,{withFileTypes:true}))
